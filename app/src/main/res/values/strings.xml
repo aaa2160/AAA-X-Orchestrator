@@ -1,0 +1,5 @@
+<resources>
+    <string name="app_name">AAA X-Orchestrator</string>
+    <string name="accessibility_service_label">AAA X-Orchestrator Automation</string>
+    <string name="accessibility_service_description">Provides automated gesture dispatch, 2nr number reading, and hardware emergency kill-switch interception for autonomous workflow execution.</string>
+</resources>
