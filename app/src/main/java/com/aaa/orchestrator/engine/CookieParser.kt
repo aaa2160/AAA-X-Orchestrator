@@ -19,8 +19,8 @@ object CookieParser {
      * Converts a standard semicolon-separated cookie header into AdsPower / Dolphin Anty JSON format.
      */
     fun toJsonAntiDetectFormat(cookieString: String, domain: String = ".x.com"): String {
-        val jsonArray = JSONArray()
         val pairs = cookieString.split(";")
+        val items = mutableListOf<String>()
 
         for (pair in pairs) {
             val trimmed = pair.trim()
@@ -30,20 +30,22 @@ object CookieParser {
             if (eqIndex > 0) {
                 val name = trimmed.substring(0, eqIndex).trim()
                 val value = trimmed.substring(eqIndex + 1).trim()
+                val isHttpOnly = name == "auth_token"
 
-                val cookieObj = JSONObject().apply {
-                    put("name", name)
-                    put("value", value)
-                    put("domain", domain)
-                    put("path", "/")
-                    put("httpOnly", name == "auth_token")
-                    put("secure", true)
-                }
-                jsonArray.put(cookieObj)
+                items.add(
+                    """  {
+    "name": "$name",
+    "value": "$value",
+    "domain": "$domain",
+    "path": "/",
+    "httpOnly": $isHttpOnly,
+    "secure": true
+  }"""
+                )
             }
         }
 
-        return jsonArray.toString(2)
+        return "[\n" + items.joinToString(",\n") + "\n]"
     }
 
     /**

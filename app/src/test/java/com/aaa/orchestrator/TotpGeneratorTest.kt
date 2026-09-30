@@ -9,8 +9,8 @@ class TotpGeneratorTest {
     @Test
     fun testBase32Decoding() {
         val decoded = TotpGenerator.decodeBase32("JBSWY3DPEHPK3PXP")
-        assertEquals("Hello!\u00DE-", String(decoded, Charsets.ISO_8859_1).take(6))
-        assertTrue(decoded.isNotEmpty())
+        assertEquals(10, decoded.size)
+        assertEquals("Hello!", String(decoded, Charsets.ISO_8859_1).take(6))
     }
 
     @Test
