@@ -1,0 +1,8 @@
+.env
+*.env
+local.properties
+.gradle/
+build/
+*.keystore
+*.jks
+service-account.json
