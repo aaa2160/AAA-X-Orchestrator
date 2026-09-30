@@ -29,7 +29,19 @@ class OrchestratorForegroundService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         val statusText = intent?.getStringExtra(EXTRA_STATUS_TEXT) ?: "Autonomous Workflow Active"
         val notification = buildNotification(statusText)
-        startForeground(NOTIFICATION_ID, notification)
+        try {
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+                startForeground(
+                    NOTIFICATION_ID,
+                    notification,
+                    android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
+                )
+            } else {
+                startForeground(NOTIFICATION_ID, notification)
+            }
+        } catch (e: Exception) {
+            timber.log.Timber.e(e, "Foreground service startForeground fallback: continuing execution")
+        }
         return START_STICKY
     }
 

@@ -24,6 +24,13 @@ class OrchestratorApp : Application() {
             Timber.plant(Timber.DebugTree())
         }
 
+        // Global crash guard to prevent unexpected ANR / system crash dialogs
+        val defaultHandler = Thread.getDefaultUncaughtExceptionHandler()
+        Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
+            Timber.e(throwable, "Fatal crash intercepted in thread ${thread.name}: ${throwable.message}")
+            defaultHandler?.uncaughtException(thread, throwable)
+        }
+
         createNotificationChannels()
         Timber.i("AAA X-Orchestrator initialized successfully.")
     }

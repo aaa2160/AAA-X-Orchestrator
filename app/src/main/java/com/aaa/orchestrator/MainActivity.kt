@@ -40,7 +40,12 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
 
         val app = application as OrchestratorApp
-        accountRepo = AccountRepository(app.database.accountDao())
+        accountRepo = try {
+            AccountRepository(app.database.accountDao())
+        } catch (e: Exception) {
+            timber.log.Timber.e(e, "Database initialization fallback to in-memory store")
+            AccountRepository(com.aaa.orchestrator.data.local.InMemoryAccountDao())
+        }
         engine = OrchestratorEngine(this, accountRepo)
 
         // Bind hardware kill switch trigger callback

@@ -1,6 +1,7 @@
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
+    alias(libs.plugins.kotlin.kapt)
 }
 
 android {
@@ -77,9 +78,14 @@ dependencies {
     implementation(libs.androidx.material3)
     implementation(libs.androidx.material.icons.extended)
 
-    // Room Database
+    // Room Database (with Kapt Annotation Processing)
     implementation(libs.androidx.room.runtime)
     implementation(libs.androidx.room.ktx)
+    kapt(libs.androidx.room.compiler)
+
+    // Offline Google ML Kit Vision & Hardware Keystore Encryption
+    implementation(libs.mlkit.text.recognition)
+    implementation(libs.androidx.security.crypto)
 
     // Coroutines
     implementation(libs.kotlinx.coroutines.core)
