@@ -20,7 +20,7 @@ class SmsNotificationListener : NotificationListenerService() {
         // Check if notification is from 2nr or messaging app
         if (packageName.contains("nr") || packageName.contains("sms") || packageName.contains("mobi")) {
             Timber.i("Incoming notification from $packageName: $title - $text")
-            val code = extractSixDigitOtp(text) ?: extractSixDigitOtp(title)
+            val code = extractOtp(text) ?: extractOtp(title)
             if (code != null) {
                 Timber.i("EXTRACTED SMS OTP CODE: $code")
                 onOtpReceived?.invoke(code)
@@ -28,9 +28,29 @@ class SmsNotificationListener : NotificationListenerService() {
         }
     }
 
-    private fun extractSixDigitOtp(content: String): String? {
-        val regex = Regex("\\b\\d{6}\\b")
-        return regex.find(content)?.value
+    fun extractOtp(content: String): String? {
+        if (content.isBlank()) return null
+
+        // 1. Direct 6-digit contiguous code
+        val directMatch = Regex("\\b\\d{6}\\b").find(content)?.value
+        if (directMatch != null) return directMatch
+
+        // 2. 3-3 split codes common in SMS aggregators (e.g., "123 456" or "123-456")
+        val splitMatch = Regex("\\b\\d{3}[-\\s]\\d{3}\\b").find(content)?.value
+        if (splitMatch != null) {
+            return splitMatch.replace("-", "").replace(" ", "")
+        }
+
+        // 3. Keyword-prefixed OTPs (Polish "kod", "hasło", English "code", "pin", "verification")
+        val prefixRegex = Regex("(?i)(?:kod|hasło|code|pin|weryfikacyjny|verification)[:\\s]+([0-9]{4,8})")
+        val prefixMatch = prefixRegex.find(content)?.groupValues?.get(1)
+        if (prefixMatch != null) return prefixMatch
+
+        // 4. Twitter / X specific format: "G-123456" or standard digit block
+        val xMatch = Regex("(?i)G-(\\d{6})").find(content)?.groupValues?.get(1)
+        if (xMatch != null) return xMatch
+
+        return null
     }
 
     companion object {

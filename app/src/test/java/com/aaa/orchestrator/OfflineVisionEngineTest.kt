@@ -22,4 +22,12 @@ class OfflineVisionEngineTest {
         assertNotNull(phone)
         assertEquals("+48459074092", phone)
     }
+
+    @Test
+    fun testExtractPolishPhoneNumberStartingWith48Prefix() {
+        val ocrOutput = "Numer: 489-123-456 ważny"
+        val phone = OfflineVisionEngine.extractPolishPhoneNumber(ocrOutput)
+        assertNotNull(phone)
+        assertEquals("+48489123456", phone)
+    }
 }

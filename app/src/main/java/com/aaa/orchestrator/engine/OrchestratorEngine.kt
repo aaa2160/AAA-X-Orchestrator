@@ -70,6 +70,16 @@ class OrchestratorEngine(
     }
 
     /**
+     * Graceful stop triggered intentionally by user.
+     */
+    fun stopAutomation() {
+        activeJob?.cancel()
+        _state.value = OrchestratorState.Idle
+        _metrics.value = _metrics.value.copy(isRunning = false)
+        Timber.i("Automation stopped gracefully by user.")
+    }
+
+    /**
      * Emergency Kill Switch trigger (< 1 millisecond response).
      */
     fun triggerEmergencyKillSwitch() {
@@ -83,6 +93,12 @@ class OrchestratorEngine(
     private suspend fun executeSingleAccountCycle() {
         // Phase 1: Pre-Flight Safety & Diagnostics
         _state.value = OrchestratorState.PreflightCheck
+        val batterySnapshot = hardwareGuard.checkHardwareStatus()
+        _metrics.value = _metrics.value.copy(
+            batteryPercent = batterySnapshot.percent,
+            batteryTempCelsius = batterySnapshot.temperatureCelsius
+        )
+
         val (isSafe, reason) = hardwareGuard.isSafeToOperate()
         if (!isSafe) {
             _state.value = OrchestratorState.PausedThrottled(reason ?: "Hardware Guard Active")
@@ -102,9 +118,9 @@ class OrchestratorEngine(
 
         // Phase 3: Telephony & 2nr Pool Acquisition
         val activeSlot = telephonyRepo.getActiveSlot()
-        val phoneNumber = activeSlot?.phoneNumber ?: "+48459074091"
+        val phoneNumber = activeSlot.phoneNumber
         _state.value = OrchestratorState.TelephonyLoop(
-            slotNumber = activeSlot?.slotIndex ?: 1,
+            slotNumber = activeSlot.slotIndex,
             phoneNumber = phoneNumber
         )
         delay(1200)

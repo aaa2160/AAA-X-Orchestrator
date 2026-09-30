@@ -2,7 +2,25 @@
 
 All notable changes and architectural configurations for this project are documented here.
 
-## [Unreleased] - 2026-09-30
+## [1.1.0] - 2026-09-30
+
+### Fixed & Improved
+- **Adaptive Icon Suite**: Created [`ic_launcher_background.xml`](file:///root/project/AAAX/app/src/main/res/drawable/ic_launcher_background.xml), [`ic_launcher.xml`](file:///root/project/AAAX/app/src/main/res/drawable/ic_launcher.xml), and [`ic_launcher_round.xml`](file:///root/project/AAAX/app/src/main/res/drawable/ic_launcher_round.xml) preventing launcher vector stretching and distorted icon displays on Samsung One UI.
+- **Android 13+ Notification Permission**: Added `<uses-permission android:name="android.permission.POST_NOTIFICATIONS" />` in [`AndroidManifest.xml`](file:///root/project/AAAX/app/src/main/AndroidManifest.xml) and runtime permission verification in [`MainActivity.kt`](file:///root/project/AAAX/app/src/main/java/com/aaa/orchestrator/MainActivity.kt) ensuring foreground notifications remain permanently visible.
+- **Back Navigation & Lifecycle Leaks**: Implemented `BackHandler` returning to Dashboard before application exit, and cleared kill switch listener in `onDestroy()` preventing activity memory leaks.
+- **Polish 2nr SMS Verification Extraction**: Enhanced [`SmsNotificationListener.kt`](file:///root/project/AAAX/app/src/main/java/com/aaa/orchestrator/service/SmsNotificationListener.kt) to catch 3-3 split codes (`123 456`, `123-456`), Twitter `G-` codes, and keyword-prefixed Polish messages (`kod:`, `hasło:`).
+- **Phone Number Area Code Disambiguation**: Fixed [`OfflineVisionEngine.kt`](file:///root/project/AAAX/app/src/main/java/com/aaa/orchestrator/engine/OfflineVisionEngine.kt) to disambiguate 9-digit numbers starting with local area code `48` from 11-digit international country codes, preventing 7-digit truncation errors.
+- **Anti-Detect Cookie Value Sanitization**: Added strict quote, newline, and backslash JSON escaping in [`CookieParser.kt`](file:///root/project/AAAX/app/src/main/java/com/aaa/orchestrator/engine/CookieParser.kt) guaranteeing valid profile import into AdsPower and Dolphin Anty.
+- **Defensive 2FA TOTP Calculation**: Handled empty and malformed Base32 secrets in [`TotpGenerator.kt`](file:///root/project/AAAX/app/src/main/java/com/aaa/orchestrator/engine/TotpGenerator.kt) preventing `IllegalArgumentException` fatal crashes.
+- **Real-Time Battery & Thermal Telemetry**: Wired live Samsung Galaxy A30 battery percentage and temperature from `HardwareGuard` directly into `DashboardMetrics` in [`OrchestratorEngine.kt`](file:///root/project/AAAX/app/src/main/java/com/aaa/orchestrator/engine/OrchestratorEngine.kt).
+- **Telegram Batch Chunking (4096-Char Limit Defense)**: Refactored [`CloudSyncRepository.kt`](file:///root/project/AAAX/app/src/main/java/com/aaa/orchestrator/data/repository/CloudSyncRepository.kt) to chunk account lists into max 15 records per message, eliminating Telegram HTTP 400 `message is too long` rejections.
+- **Infinite Telephony Auto-Renewal**: Configured [`TelephonyPoolRepository.kt`](file:///root/project/AAAX/app/src/main/java/com/aaa/orchestrator/data/repository/TelephonyPoolRepository.kt) to automatically renew exhausted number pools, ensuring continuous non-stop workflow operation.
+- **Live Authenticated Proxy Ping**: Wired [`ProxyEngine.kt`](file:///root/project/AAAX/app/src/main/java/com/aaa/orchestrator/engine/ProxyEngine.kt) with OkHttp basic proxy authentication and roundtrip latency calculation, connected directly to [`SettingsScreen.kt`](file:///root/project/AAAX/app/src/main/java/com/aaa/orchestrator/ui/screens/SettingsScreen.kt).
+- **Titanium AdBlock Interceptor & Render Process Crash Protection**: Implemented `shouldInterceptRequest` filtering against top ad and tracker domains, and `onRenderProcessGone` consuming low-memory renderer crashes on Galaxy A30 in [`BrowserScreen.kt`](file:///root/project/AAAX/app/src/main/java/com/aaa/orchestrator/ui/screens/BrowserScreen.kt).
+- **Accounts Vault Sharesheet Export**: Added bulk account export with native Android Sharesheet in [`VaultScreen.kt`](file:///root/project/AAAX/app/src/main/java/com/aaa/orchestrator/ui/screens/VaultScreen.kt).
+- **Unit Test Suite Expansion**: Added tests in [`SmsNotificationListenerTest.kt`](file:///root/project/AAAX/app/src/test/java/com/aaa/orchestrator/SmsNotificationListenerTest.kt) and [`OfflineVisionEngineTest.kt`](file:///root/project/AAAX/app/src/test/java/com/aaa/orchestrator/OfflineVisionEngineTest.kt).
+
+## [1.0.0] - 2026-09-30
 
 ### Added
 - **Hardened Crash-Proof Architecture & Enterprise Model Integration**:

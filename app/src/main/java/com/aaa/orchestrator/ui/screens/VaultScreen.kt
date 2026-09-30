@@ -3,6 +3,7 @@ package com.aaa.orchestrator.ui.screens
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import android.content.Intent
 import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -42,16 +43,47 @@ fun VaultScreen(
             .background(BackgroundLight)
             .padding(16.dp)
     ) {
-        Text(
-            text = "Accounts Vault",
-            style = MaterialTheme.typography.headlineMedium,
-            color = TextSlateDark
-        )
-        Text(
-            text = "${accounts.size} Provisioned Twitter/X Accounts",
-            style = MaterialTheme.typography.bodyMedium,
-            color = TextMuted
-        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column {
+                Text(
+                    text = "Accounts Vault",
+                    style = MaterialTheme.typography.headlineMedium,
+                    color = TextSlateDark
+                )
+                Text(
+                    text = "${accounts.size} Provisioned Twitter/X Accounts",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = TextMuted
+                )
+            }
+
+            if (accounts.isNotEmpty()) {
+                FilledTonalButton(
+                    onClick = { shareAllAccounts(context, accounts) },
+                    shape = RoundedCornerShape(10.dp),
+                    colors = ButtonDefaults.filledTonalButtonColors(containerColor = SoftBlueTile),
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Share,
+                        contentDescription = "Export All",
+                        tint = PrimaryBlue,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = "Export All",
+                        color = PrimaryBlue,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }
+        }
 
         Spacer(modifier = Modifier.height(12.dp))
 
@@ -206,4 +238,21 @@ private fun copyToClipboard(context: Context, label: String, text: String) {
     val clip = ClipData.newPlainText(label, text)
     clipboard.setPrimaryClip(clip)
     Toast.makeText(context, "$label copied to clipboard", Toast.LENGTH_SHORT).show()
+}
+
+private fun shareAllAccounts(context: Context, accounts: List<AccountRecord>) {
+    if (accounts.isEmpty()) {
+        Toast.makeText(context, "No accounts to export", Toast.LENGTH_SHORT).show()
+        return
+    }
+    val sb = StringBuilder()
+    for (acc in accounts) {
+        sb.append(acc.toDelimitedLine(":")).append("\n")
+    }
+    val intent = Intent(Intent.ACTION_SEND).apply {
+        type = "text/plain"
+        putExtra(Intent.EXTRA_SUBJECT, "AAA X-Orchestrator Export (${accounts.size} accounts)")
+        putExtra(Intent.EXTRA_TEXT, sb.toString())
+    }
+    context.startActivity(Intent.createChooser(intent, "Export All Accounts"))
 }

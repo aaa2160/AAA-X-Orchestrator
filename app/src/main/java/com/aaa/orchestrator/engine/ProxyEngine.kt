@@ -41,19 +41,37 @@ class ProxyEngine(
 
     suspend fun verifyProxyHealth(): Pair<Boolean, Long> = withContext(Dispatchers.IO) {
         val start = System.currentTimeMillis()
+        val endpoint = getActiveProxy()
         try {
-            val endpoint = getActiveProxy()
-            // Quick connectivity test ping
+            val proxy = Proxy(Proxy.Type.HTTP, InetSocketAddress(endpoint.host, endpoint.port))
+            val proxyClient = client.newBuilder()
+                .proxy(proxy)
+                .proxyAuthenticator { _, response ->
+                    val credential = okhttp3.Credentials.basic(endpoint.user, endpoint.pass)
+                    response.request.newBuilder()
+                        .header("Proxy-Authorization", credential)
+                        .build()
+                }
+                .build()
+
             val request = Request.Builder()
                 .url("https://ipv4.webshare.io/")
                 .build()
 
-            val latency = System.currentTimeMillis() - start
-            Timber.i("Proxy health verified via ${endpoint.host}:${endpoint.port} (${endpoint.country}) in ${latency}ms")
-            return@withContext Pair(true, latency)
+            proxyClient.newCall(request).execute().use { response ->
+                val latency = System.currentTimeMillis() - start
+                if (response.isSuccessful) {
+                    Timber.i("Proxy health verified via ${endpoint.host}:${endpoint.port} (${endpoint.country}) in ${latency}ms")
+                    return@withContext Pair(true, latency)
+                } else {
+                    Timber.w("Proxy responded with HTTP ${response.code}. Rotating.")
+                    rotateProxy()
+                    return@withContext Pair(false, latency)
+                }
+            }
         } catch (e: Exception) {
             val latency = System.currentTimeMillis() - start
-            Timber.w("Proxy ping failed (${latency}ms). Rotating to next proxy endpoint.")
+            Timber.w("Proxy ping failed (${latency}ms): ${e.message}. Rotating to next proxy endpoint.")
             rotateProxy()
             return@withContext Pair(false, latency)
         }

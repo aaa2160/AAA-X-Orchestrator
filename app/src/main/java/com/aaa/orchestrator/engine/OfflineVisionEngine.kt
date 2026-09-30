@@ -50,6 +50,11 @@ object OfflineVisionEngine {
         val regex = Regex("(\\+48[\\s-]?[0-9]{3}[\\s-]?[0-9]{3}[\\s-]?[0-9]{3}|[0-9]{3}[\\s-]?[0-9]{3}[\\s-]?[0-9]{3})")
         val match = regex.find(ocrText)?.value ?: return null
         val digits = match.replace(Regex("[^0-9]"), "")
-        return if (digits.startsWith("48")) "+$digits" else "+48$digits"
+        return when {
+            digits.length == 11 && digits.startsWith("48") -> "+$digits"
+            digits.length == 9 -> "+48$digits"
+            digits.length == 12 && digits.startsWith("0048") -> "+${digits.substring(2)}"
+            else -> if (digits.length >= 9) "+48${digits.takeLast(9)}" else null
+        }
     }
 }

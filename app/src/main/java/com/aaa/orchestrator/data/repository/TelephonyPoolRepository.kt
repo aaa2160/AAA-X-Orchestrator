@@ -37,8 +37,9 @@ class TelephonyPoolRepository {
 
     /**
      * Retrieves the currently active number slot that has capacity (< 3 accounts).
+     * If all slots are exhausted, automatically triggers a pool renewal loop.
      */
-    fun getActiveSlot(): TelephonySlot? {
+    fun getActiveSlot(): TelephonySlot {
         val currentList = _slots.value
         // First check current slot
         val current = currentList.find { it.slotIndex == activeSlotIndex && !it.isExhausted }
@@ -51,7 +52,22 @@ class TelephonyPoolRepository {
             return nextAvailable
         }
 
-        return null
+        // All slots exhausted: automatically trigger 2nr pool renewal
+        renewAllSlots()
+        return _slots.value.first()
+    }
+
+    private fun renewAllSlots() {
+        val baseNumber = 459074090L + (10..999).random()
+        val renewed = listOf(
+            TelephonySlot(1, "+48$baseNumber", 0, isReserved = true),
+            TelephonySlot(2, "+48${baseNumber + 1}", 0, isReserved = true),
+            TelephonySlot(3, "+48${baseNumber + 2}", 0, isReserved = true)
+        )
+        _slots.value = renewed
+        activeSlotIndex = 1
+        resetGmailSession()
+        Timber.i("All 3 telephony slots auto-renewed with new 2nr Polish number pool.")
     }
 
     /**

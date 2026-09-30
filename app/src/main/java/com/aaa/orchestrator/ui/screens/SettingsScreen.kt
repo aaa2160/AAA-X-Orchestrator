@@ -9,14 +9,9 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import com.aaa.orchestrator.ui.theme.*
+import androidx.compose.runtime.*
+import kotlinx.coroutines.launch
+import com.aaa.orchestrator.engine.ProxyEngine
 
 @Composable
 fun SettingsScreen(
@@ -25,6 +20,9 @@ fun SettingsScreen(
 ) {
     val context = LocalContext.current
     val scrollState = rememberScrollState()
+    val scope = rememberCoroutineScope()
+    val proxyEngine = remember { ProxyEngine() }
+    var isPinging by remember { mutableStateOf(false) }
 
     Column(
         modifier = modifier
@@ -167,12 +165,31 @@ fun SettingsScreen(
         ) {
             OutlinedButton(
                 onClick = {
-                    Toast.makeText(context, "Proxy ping OK (118ms, Poland IP)", Toast.LENGTH_SHORT).show()
+                    if (!isPinging) {
+                        scope.launch {
+                            isPinging = true
+                            val (success, latency) = proxyEngine.verifyProxyHealth()
+                            isPinging = false
+                            val endpoint = proxyEngine.getActiveProxy()
+                            if (success) {
+                                Toast.makeText(context, "Proxy OK: ${endpoint.host}:${endpoint.port} (${endpoint.country}) in ${latency}ms", Toast.LENGTH_SHORT).show()
+                            } else {
+                                Toast.makeText(context, "Proxy ping failed (${latency}ms). Rotated to fallback endpoint.", Toast.LENGTH_LONG).show()
+                            }
+                        }
+                    }
                 },
+                enabled = !isPinging,
                 modifier = Modifier.weight(1f),
                 shape = RoundedCornerShape(10.dp)
             ) {
-                Text("Ping Proxy")
+                if (isPinging) {
+                    CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp, color = PrimaryBlue)
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text("Pinging...")
+                } else {
+                    Text("Ping Proxy")
+                }
             }
 
             Button(

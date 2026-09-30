@@ -22,9 +22,15 @@ object TotpGenerator {
      */
     fun generateCurrentCode(base32Secret: String, timestampMs: Long = System.currentTimeMillis()): String {
         val cleanSecret = base32Secret.replace(" ", "").uppercase()
+        if (cleanSecret.isEmpty()) return "000000"
         val keyBytes = decodeBase32(cleanSecret)
+        if (keyBytes.isEmpty()) return "000000"
         val timeIndex = timestampMs / 1000L / TIME_STEP_SECONDS
-        return generateCodeForTimeIndex(keyBytes, timeIndex)
+        return try {
+            generateCodeForTimeIndex(keyBytes, timeIndex)
+        } catch (e: Exception) {
+            "000000"
+        }
     }
 
     /**

@@ -1,8 +1,10 @@
 package com.aaa.orchestrator
 
+import android.os.Build
 import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -39,6 +41,13 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
+        // Runtime Notification Permission for Android 13+ (API 33+)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                requestPermissions(arrayOf(android.Manifest.permission.POST_NOTIFICATIONS), 101)
+            }
+        }
+
         val app = application as OrchestratorApp
         accountRepo = try {
             AccountRepository(app.database.accountDao())
@@ -63,6 +72,11 @@ class MainActivity : ComponentActivity() {
                 val metrics by engine.metrics.collectAsState()
                 val accounts by accountRepo.allAccounts.collectAsState(initial = emptyList())
                 var selectedTab by remember { mutableStateOf<NavTab>(NavTab.Dashboard) }
+
+                // Graceful Back Navigation to Dashboard before exit
+                BackHandler(enabled = selectedTab != NavTab.Dashboard) {
+                    selectedTab = NavTab.Dashboard
+                }
 
                 Scaffold(
                     bottomBar = {
@@ -104,7 +118,7 @@ class MainActivity : ComponentActivity() {
                             },
                             onStopClick = {
                                 OrchestratorAccessibilityService.isAutomationRunning.set(false)
-                                engine.triggerEmergencyKillSwitch()
+                                engine.stopAutomation()
                                 OrchestratorForegroundService.stop(this)
                             },
                             modifier = Modifier.padding(innerPadding)
@@ -127,5 +141,10 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        OrchestratorAccessibilityService.onKillSwitchTriggered = null
     }
 }

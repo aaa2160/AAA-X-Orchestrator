@@ -31,11 +31,13 @@ object CookieParser {
                 val name = trimmed.substring(0, eqIndex).trim()
                 val value = trimmed.substring(eqIndex + 1).trim()
                 val isHttpOnly = name == "auth_token"
+                val escapedName = escapeJsonString(name)
+                val escapedValue = escapeJsonString(value)
 
                 items.add(
                     """  {
-    "name": "$name",
-    "value": "$value",
+    "name": "$escapedName",
+    "value": "$escapedValue",
     "domain": "$domain",
     "path": "/",
     "httpOnly": $isHttpOnly,
@@ -46,6 +48,14 @@ object CookieParser {
         }
 
         return "[\n" + items.joinToString(",\n") + "\n]"
+    }
+
+    private fun escapeJsonString(str: String): String {
+        return str.replace("\\", "\\\\")
+            .replace("\"", "\\\"")
+            .replace("\n", "\\n")
+            .replace("\r", "\\r")
+            .replace("\t", "\\t")
     }
 
     /**
