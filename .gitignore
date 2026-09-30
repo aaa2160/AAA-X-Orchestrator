@@ -6,3 +6,4 @@ build/
 *.keystore
 *.jks
 service-account.json
+*.apk
