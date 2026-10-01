@@ -27,6 +27,12 @@ class TelegramBotIntegrationTest {
         val nigerianPhone = OrchestratorAccessibilityService.extractBotPhoneNumber("+2348091267977")
         assertEquals("+2348091267977", nigerianPhone)
 
+        val spacedPhone = OrchestratorAccessibilityService.extractBotPhoneNumber("🇳🇬 +234 809 126 7977")
+        assertEquals("+2348091267977", spacedPhone)
+
+        val hyphenPhone = OrchestratorAccessibilityService.extractBotPhoneNumber("+1-202-555-0192")
+        assertEquals("+12025550192", hyphenPhone)
+
         val polishPhone = OrchestratorAccessibilityService.extractBotPhoneNumber("🇵🇱 +48459074091")
         assertEquals("+48459074091", polishPhone)
 

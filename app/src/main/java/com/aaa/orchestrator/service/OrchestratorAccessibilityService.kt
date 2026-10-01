@@ -217,9 +217,26 @@ class OrchestratorAccessibilityService : AccessibilityService() {
 
         fun extractBotPhoneNumber(text: String): String? {
             if (text.isBlank()) return null
-            // Matches international format: +[country_code][number], e.g. +2348091267977 or +48459074091
-            val match = Regex("\\+([0-9]{9,15})").find(text) ?: return null
-            return match.value
+            // 1. Direct contiguous international format: +[country_code][number], e.g. +2348091267977
+            val directMatch = Regex("\\+([0-9]{9,15})").find(text)
+            if (directMatch != null) return directMatch.value
+
+            // 2. Formatted international number with spaces/hyphens, e.g. +234 809 126 7977 or +1-202-555-0192
+            val formattedMatch = Regex("\\+\\d[\\d\\s\\-\\(\\)]{8,20}\\d").find(text)
+            if (formattedMatch != null) {
+                val cleaned = "+" + formattedMatch.value.replace(Regex("[^0-9]"), "")
+                if (cleaned.length in 10..16) {
+                    return cleaned
+                }
+            }
+
+            // 3. Standalone phone digit blocks
+            val standaloneDigits = Regex("\\b([0-9]{10,15})\\b").find(text)
+            if (standaloneDigits != null) {
+                return "+" + standaloneDigits.value
+            }
+
+            return null
         }
 
         fun extractPolishPhone(text: String): String? {
