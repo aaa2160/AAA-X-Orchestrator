@@ -23,22 +23,20 @@ class TelephonyPoolTest {
     }
 
     @Test
-    fun testSlotUsageIncrementAndExhaustionAtThree() {
+    fun testSlotUsageIncrementAndExhaustionAtSix() {
         val active = repo.getActiveSlot()
         assertNotNull(active)
         assertEquals(1, active!!.slotIndex)
 
-        // Increment 1
-        var isExhausted = repo.incrementActiveSlotUsage()
-        assertFalse(isExhausted)
+        // Increment 1 to 5
+        for (i in 1..5) {
+            val isExhausted = repo.incrementActiveSlotUsage()
+            assertFalse(isExhausted)
+        }
 
-        // Increment 2
-        isExhausted = repo.incrementActiveSlotUsage()
-        assertFalse(isExhausted)
-
-        // Increment 3 -> Reaches limit
-        isExhausted = repo.incrementActiveSlotUsage()
-        assertTrue("Slot must be exhausted after 3 accounts", isExhausted)
+        // Increment 6 -> Reaches limit
+        val isExhausted = repo.incrementActiveSlotUsage()
+        assertTrue("Slot must be exhausted after 6 accounts", isExhausted)
 
         // Next active slot should automatically shift to slot 2
         val nextActive = repo.getActiveSlot()
