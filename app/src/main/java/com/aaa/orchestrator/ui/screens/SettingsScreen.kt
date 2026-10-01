@@ -264,22 +264,22 @@ fun SettingsScreen(
                             val newCountry = proxyEngine.toggleCountry()
                             Toast.makeText(
                                 context,
-                                if (newCountry == "DE") "🇩🇪 Germany Route: Face Verification Bypass & 6 OTPs active" else "🇵🇱 Poland Route: Carrier Match active",
+                                "Proxy Route updated: $newCountry",
                                 Toast.LENGTH_SHORT
                             ).show()
                         },
                         shape = RoundedCornerShape(8.dp),
                         colors = ButtonDefaults.filledTonalButtonColors(
-                            containerColor = if (country == "DE") SoftGreenTile else SoftBlueTile
+                            containerColor = if (country == "RANDOM") SoftGreenTile else SoftBlueTile
                         ),
                         contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
                         modifier = Modifier.height(30.dp)
                     ) {
                         Text(
-                            text = if (country == "DE") "🇩🇪 Germany (Recommended)" else "🇵🇱 Poland",
+                            text = if (country == "RANDOM") "Random Locations (Active)" else "Region: $country",
                             fontSize = 11.sp,
                             fontWeight = FontWeight.Bold,
-                            color = if (country == "DE") SuccessGreen else PrimaryBlue
+                            color = if (country == "RANDOM") SuccessGreen else PrimaryBlue
                         )
                     }
                 }
@@ -293,14 +293,14 @@ fun SettingsScreen(
                 ) {
                     Column(modifier = Modifier.padding(10.dp)) {
                         Text(
-                            text = "🔥 Twitter Method: Face Verification Solution",
+                            text = "Automated Rotation & Face Verification Handling",
                             fontSize = 11.sp,
                             fontWeight = FontWeight.Bold,
                             color = SuccessGreen
                         )
                         Spacer(modifier = Modifier.height(2.dp))
                         Text(
-                            text = "Routing traffic via Germany (🇩🇪) eliminates Twitter/X Face Verification challenges and allows receiving up to 6 OTPs per Polish 2nr phone number.",
+                            text = "Multi-region proxy routing dynamically disperses request origins across Germany, UK, US, Netherlands, France, and Poland, preventing IP velocity rate-limits.",
                             fontSize = 11.sp,
                             color = TextSlateDark,
                             lineHeight = 16.sp
@@ -310,7 +310,7 @@ fun SettingsScreen(
 
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
-                    text = "Active Egress: ${if (country == "DE") "Germany (DE) - Bypass Mode" else "Poland (PL) - Direct Carrier"}\nEndpoints: p.webshare.io:80 (lebvkslv / acdyvomx)",
+                    text = "Active Egress: $country (${if (country == "RANDOM") "Dynamic Rotation" else "Fixed Pool"})\nEndpoints: p.webshare.io:80 (Enterprise Tunnel)",
                     style = MaterialTheme.typography.bodySmall,
                     color = TextMuted,
                     lineHeight = 18.sp

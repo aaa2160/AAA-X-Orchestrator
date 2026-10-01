@@ -62,7 +62,7 @@ async def handle_bot_message(event):
                 match = re.search(r"\+([0-9]{9,15})", btn_text)
                 if match:
                     phone_found = match.group(0)
-                    print(f"[🎯] Phone Number Detected in Button: {phone_found}")
+                    print(f"[PHONE] Phone Number Detected in Button: {phone_found}")
                     sync_to_cloud("/api/phone", {"phoneNumber": phone_found})
 
     # Step 0: Check for Main Menu 'GET NUMBER'
@@ -103,14 +103,14 @@ async def handle_bot_message(event):
         match = re.search(r"\+([0-9]{9,15})", message_text)
         if match:
             phone_found = match.group(0)
-            print(f"[🎯] Phone Number Detected in Text: {phone_found}")
+            print(f"[PHONE] Phone Number Detected in Text: {phone_found}")
             sync_to_cloud("/api/phone", {"phoneNumber": phone_found})
 
     # Step 4: Check for 6-digit OTP verification code
     otp_match = re.search(r"\b\d{6}\b", message_text)
     if otp_match:
         otp_code = otp_match.group(0)
-        print(f"[🔥] OTP Code Detected: {otp_code}")
+        print(f"[OTP] Verification Code Detected: {otp_code}")
         sync_to_cloud("/api/otp", {"code": otp_code, "source": "telegram_bot"})
 
 async def request_new_number():
@@ -136,14 +136,14 @@ async def request_new_number():
 
 async def main():
     print("=" * 65)
-    print("⚡ AAA-X Autonomous Telegram Worker for @EHR_QUICKINCOME_BOT")
+    print("AAA-X Autonomous Telegram Worker for @EHR_QUICKINCOME_BOT")
     print(f"[*] Target Bot: @{TARGET_BOT}")
     print(f"[*] Cloud Target: {CLOUD_ENDPOINT}")
     print("=" * 65)
 
     await client.start()
     me = await client.get_me()
-    print(f"[✓] Logged in as: {me.first_name} (@{me.username or 'No Username'}, Phone: +{me.phone})")
+    print(f"[OK] Logged in as: {me.first_name} (@{me.username or 'No Username'}, Phone: +{me.phone})")
 
     # Start the automated number request flow
     await request_new_number()

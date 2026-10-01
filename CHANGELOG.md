@@ -2,6 +2,25 @@
 
 All notable changes and architectural configurations for this project are documented here.
 
+## [1.9.0] - 2026-10-01
+
+### Added & Enhanced
+- **Enterprise UI Polish & Zero Emojis**:
+  - Completely purged all emoji icons from the application UI, buttons, HUD banners, toast messages, and dialogs.
+  - Replaced with clean Google Material icons and professional typography across Browser, Settings, Dashboard, and Floating Assistant.
+- **Face Verification & Security Challenge Detection ([`FaceVerificationNotifier.kt`](file:///root/project/AAAX/app/src/main/java/com/aaa/orchestrator/engine/FaceVerificationNotifier.kt))**:
+  - Implemented high-priority notification channel (`face_verification_alerts`) with custom haptic vibration patterns.
+  - Automatically alerts the operator when Twitter/X presents an on-screen identity check, selfie verification, or Arkose challenge so it can be completed immediately without breaking the automated flow.
+- **Twitter Auto-Pilot DOM Engine ([`TwitterAutoPilot.kt`](file:///root/project/AAAX/app/src/main/java/com/aaa/orchestrator/engine/TwitterAutoPilot.kt))**:
+  - Autonomous JavaScript DOM bridge that detects registration form steps.
+  - Automatically simulates human-like typing for generated names ([`AccountProfileGenerator.kt`](file:///root/project/AAAX/app/src/main/java/com/aaa/orchestrator/engine/AccountProfileGenerator.kt)), phone numbers, and birth dates.
+  - Automatically clicks "Next", "Sign up", injects received OTP verification codes, and submits secure passwords.
+- **Dynamic Random Multi-Region Proxy Engine ([`ProxyEngine.kt`](file:///root/project/AAAX/app/src/main/java/com/aaa/orchestrator/engine/ProxyEngine.kt))**:
+  - Added multi-region pools across Germany (DE), United Kingdom (GB), United States (US), Netherlands (NL), France (FR), Poland (PL), and Canada (CA).
+  - Added Random Location mode (`RANDOM`) that dynamically cycles egress origins to eliminate IP velocity flags.
+- **Clean Server & Worker Dashboard ([`server.py`](file:///root/project/AAAX/server.py), [`telegram_worker.py`](file:///root/project/AAAX/telegram_worker.py))**:
+  - Updated Render cloud dashboard with clean enterprise styling and tag-based logging.
+
 ## [1.8.0] - 2026-10-01
 
 ### Added & Enhanced

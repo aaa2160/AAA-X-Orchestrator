@@ -67,4 +67,33 @@ class TelegramBotIntegrationTest {
         assertNotNull(otp)
         assertEquals("402918", otp)
     }
+
+    @Test
+    fun testAccountProfileGenerator() {
+        val fullName = com.aaa.orchestrator.engine.AccountProfileGenerator.generateFullName()
+        assertNotNull(fullName)
+        assert(fullName.contains(" ")) { "Expected full name with first and last name, got $fullName" }
+
+        val birthDate = com.aaa.orchestrator.engine.AccountProfileGenerator.generateBirthDate()
+        assert(birthDate.month in 1..12)
+        assert(birthDate.day in 1..28)
+        assert(birthDate.year in 1993..2001)
+    }
+
+    @Test
+    fun testTwitterAutoPilotScriptGeneration() {
+        val script = com.aaa.orchestrator.engine.TwitterAutoPilot.buildAutoPilotScript(
+            name = "John Doe",
+            phone = "+2348091390514",
+            birthMonth = 5,
+            birthDay = 14,
+            birthYear = 1997,
+            password = "SecurePassword27",
+            otp = "849201"
+        )
+        assertNotNull(script)
+        assert(script.contains("+2348091390514"))
+        assert(script.contains("849201"))
+        assert(script.contains("reportFaceVerification"))
+    }
 }

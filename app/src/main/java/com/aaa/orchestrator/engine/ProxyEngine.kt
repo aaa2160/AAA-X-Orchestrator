@@ -11,14 +11,21 @@ import timber.log.Timber
 import java.net.InetSocketAddress
 import java.net.Proxy
 import java.util.concurrent.TimeUnit
+import kotlin.random.Random
 
 /**
- * Manages proxy network routing and validates low-latency egress.
+ * Manages dynamic proxy network routing with multi-region rotation,
+ * latency health checks, and random location dispatch.
  *
- * Supports:
- * - 🇩🇪 Germany Route (DE): Bypasses Twitter/X Face Verification & Bot flags, enabling up to 6 OTPs per 2nr number
- *   (Method verified via @EHR_QUICKSMS_BACKUP).
- * - 🇵🇱 Poland Route (PL): Native carrier IP alignment for +48 Polish virtual numbers.
+ * Supported regions:
+ * - Germany (DE): Recommended bypass route for Twitter automated checks
+ * - United Kingdom (GB)
+ * - United States (US)
+ * - Netherlands (NL)
+ * - France (FR)
+ * - Poland (PL): Align with +48 mobile prefixes
+ * - Canada (CA)
+ * - RANDOM: Dynamically cycles through all available regions
  */
 class ProxyEngine(
     private val client: OkHttpClient = OkHttpClient.Builder()
@@ -35,39 +42,76 @@ class ProxyEngine(
         val country: String = "DE"
     )
 
-    private val germanyPool = listOf(
-        ProxyEndpoint("de.webshare.io", 80, "lebvkslv", "7zqkmd5k0rca", "DE"),
-        ProxyEndpoint("p.webshare.io", 80, "lebvkslv", "7zqkmd5k0rca", "DE"),
-        ProxyEndpoint("p.webshare.io", 80, "acdyvomx", "xquzdqsbaqne", "DE")
+    private val proxyPool = mapOf(
+        "DE" to listOf(
+            ProxyEndpoint("de.webshare.io", 80, "lebvkslv", "7zqkmd5k0rca", "DE"),
+            ProxyEndpoint("p.webshare.io", 80, "lebvkslv", "7zqkmd5k0rca", "DE"),
+            ProxyEndpoint("p.webshare.io", 80, "acdyvomx", "xquzdqsbaqne", "DE")
+        ),
+        "GB" to listOf(
+            ProxyEndpoint("uk.webshare.io", 80, "lebvkslv", "7zqkmd5k0rca", "GB"),
+            ProxyEndpoint("p.webshare.io", 80, "lebvkslv", "7zqkmd5k0rca", "GB")
+        ),
+        "US" to listOf(
+            ProxyEndpoint("us.webshare.io", 80, "lebvkslv", "7zqkmd5k0rca", "US"),
+            ProxyEndpoint("p.webshare.io", 80, "acdyvomx", "xquzdqsbaqne", "US")
+        ),
+        "NL" to listOf(
+            ProxyEndpoint("nl.webshare.io", 80, "lebvkslv", "7zqkmd5k0rca", "NL"),
+            ProxyEndpoint("p.webshare.io", 80, "lebvkslv", "7zqkmd5k0rca", "NL")
+        ),
+        "FR" to listOf(
+            ProxyEndpoint("fr.webshare.io", 80, "lebvkslv", "7zqkmd5k0rca", "FR"),
+            ProxyEndpoint("p.webshare.io", 80, "acdyvomx", "xquzdqsbaqne", "FR")
+        ),
+        "PL" to listOf(
+            ProxyEndpoint("pl.webshare.io", 80, "lebvkslv", "7zqkmd5k0rca", "PL"),
+            ProxyEndpoint("p.webshare.io", 80, "lebvkslv", "7zqkmd5k0rca", "PL")
+        ),
+        "CA" to listOf(
+            ProxyEndpoint("ca.webshare.io", 80, "lebvkslv", "7zqkmd5k0rca", "CA"),
+            ProxyEndpoint("p.webshare.io", 80, "acdyvomx", "xquzdqsbaqne", "CA")
+        )
     )
 
-    private val polandPool = listOf(
-        ProxyEndpoint("pl.webshare.io", 80, "lebvkslv", "7zqkmd5k0rca", "PL"),
-        ProxyEndpoint("p.webshare.io", 80, "lebvkslv", "7zqkmd5k0rca", "PL"),
-        ProxyEndpoint("p.webshare.io", 80, "acdyvomx", "xquzdqsbaqne", "PL")
-    )
+    private val availableCountries = listOf("DE", "GB", "US", "NL", "FR", "PL", "CA", "RANDOM")
 
-    private val _currentCountry = MutableStateFlow("DE") // Default to Germany (Face Verification bypass)
+    private val _currentCountry = MutableStateFlow("RANDOM")
     val currentCountry: StateFlow<String> = _currentCountry.asStateFlow()
 
     private var currentProxyIndex = 0
 
     fun setCountry(countryCode: String) {
-        if (countryCode == "DE" || countryCode == "PL") {
+        if (countryCode in availableCountries) {
             _currentCountry.value = countryCode
             currentProxyIndex = 0
-            Timber.i("Proxy country routed to: $countryCode")
+            Timber.i("Proxy country set to: $countryCode")
         }
     }
 
     fun toggleCountry(): String {
-        val next = if (_currentCountry.value == "DE") "PL" else "DE"
+        val currentIndex = availableCountries.indexOf(_currentCountry.value)
+        val nextIndex = (currentIndex + 1) % availableCountries.size
+        val next = availableCountries[nextIndex]
         setCountry(next)
         return next
     }
 
+    fun randomizeLocation(): String {
+        val concreteCountries = listOf("DE", "GB", "US", "NL", "FR", "PL", "CA")
+        val randomCountry = concreteCountries.random()
+        setCountry(randomCountry)
+        return randomCountry
+    }
+
     fun getActiveProxy(): ProxyEndpoint {
-        val pool = if (_currentCountry.value == "DE") germanyPool else polandPool
+        val targetCountry = if (_currentCountry.value == "RANDOM") {
+            val concreteCountries = listOf("DE", "GB", "US", "NL", "FR", "PL", "CA")
+            concreteCountries[Random.nextInt(concreteCountries.size)]
+        } else {
+            _currentCountry.value
+        }
+        val pool = proxyPool[targetCountry] ?: proxyPool["DE"]!!
         return pool[currentProxyIndex % pool.size]
     }
 
@@ -110,7 +154,7 @@ class ProxyEngine(
     }
 
     fun rotateProxy() {
-        val pool = if (_currentCountry.value == "DE") germanyPool else polandPool
+        val pool = proxyPool[_currentCountry.value] ?: proxyPool["DE"]!!
         currentProxyIndex = (currentProxyIndex + 1) % pool.size
         Timber.i("Rotated to proxy #${currentProxyIndex + 1}: ${getActiveProxy().host} (${getActiveProxy().country})")
     }

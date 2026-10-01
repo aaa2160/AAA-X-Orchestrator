@@ -118,8 +118,8 @@ class FloatingAssistantService : Service() {
         }
 
         val closeButton = TextView(this).apply {
-            text = "✕"
-            textSize = 13f
+            text = "X"
+            textSize = 12f
             setTextColor(Color.parseColor("#94A3B8"))
             setPadding(dpToPx(6), dpToPx(2), dpToPx(6), dpToPx(2))
             setOnClickListener {
@@ -164,7 +164,7 @@ class FloatingAssistantService : Service() {
         }
 
         val returnButton = Button(this).apply {
-            text = "Return ↗"
+            text = "Return"
             textSize = 11f
             setTextColor(Color.WHITE)
             isAllCaps = false
@@ -214,7 +214,7 @@ class FloatingAssistantService : Service() {
         }
 
         val fillOtpButton = Button(this).apply {
-            text = "Fill OTP ↗"
+            text = "Fill OTP"
             textSize = 10f
             setTextColor(Color.WHITE)
             isAllCaps = false

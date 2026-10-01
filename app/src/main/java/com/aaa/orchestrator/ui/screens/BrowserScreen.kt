@@ -37,10 +37,12 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
-import com.aaa.orchestrator.data.model.OrchestratorState
+import com.aaa.orchestrator.engine.AccountProfileGenerator
 import com.aaa.orchestrator.engine.AdBlockEngine
 import com.aaa.orchestrator.engine.AppLauncher
+import com.aaa.orchestrator.engine.FaceVerificationNotifier
 import com.aaa.orchestrator.engine.OrchestratorEngine
+import com.aaa.orchestrator.engine.TwitterAutoPilot
 import com.aaa.orchestrator.ui.theme.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
@@ -113,18 +115,65 @@ fun BrowserScreen(
     val latestOtp by (engine?.latestOtp ?: remember { MutableStateFlow<String?>(null) }).collectAsState()
     val proxyCountry by (engine?.proxyCountry ?: remember { MutableStateFlow("DE") }).collectAsState()
 
-    // Auto-inject incoming OTP into Twitter signup form instantly
+    val currentProfileName = remember { mutableStateOf(AccountProfileGenerator.generateFullName()) }
+    val currentBirthDate = remember { mutableStateOf(AccountProfileGenerator.generateBirthDate()) }
+
+    // Auto-pilot bridge and notification dispatcher
+    val autoPilot = remember {
+        TwitterAutoPilot(
+            onFaceVerificationDetected = {
+                FaceVerificationNotifier.showFaceVerificationAlert(
+                    context,
+                    "Security challenge active. Complete the selfie/face check on screen."
+                )
+            },
+            onStepChanged = { step ->
+                Timber.i("Twitter AutoPilot Step: $step")
+            },
+            onAccountCompleted = { cookies ->
+                if (engine != null) {
+                    scope.launch {
+                        engine.captureRealSession(cookies)
+                    }
+                }
+            }
+        )
+    }
+
+    // Auto-inject incoming OTP into Twitter signup form instantly and advance
     LaunchedEffect(latestOtp) {
         if (!latestOtp.isNullOrBlank()) {
             injectValueIntoInput(webViewInstance, latestOtp!!)
-            Toast.makeText(context, "⚡ Auto-filled OTP code: $latestOtp", Toast.LENGTH_SHORT).show()
+            Toast.makeText(context, "Auto-filled verification code: $latestOtp", Toast.LENGTH_SHORT).show()
+
+            // Run autopilot to trigger Next/Verify
+            val script = TwitterAutoPilot.buildAutoPilotScript(
+                name = currentProfileName.value,
+                phone = phoneNumber,
+                birthMonth = currentBirthDate.value.month,
+                birthDay = currentBirthDate.value.day,
+                birthYear = currentBirthDate.value.year,
+                password = password,
+                otp = latestOtp
+            )
+            webViewInstance?.evaluateJavascript(script, null)
         }
     }
 
-    // Auto-inject detected phone number if on signup page
-    LaunchedEffect(phoneNumber) {
-        if (phoneNumber.isNotBlank() && (currentUrl.contains("signup") || currentUrl.contains("flow"))) {
-            injectValueIntoInput(webViewInstance, phoneNumber)
+    // Auto-pilot step execution when URL changes or phone number updates
+    LaunchedEffect(currentUrl, phoneNumber) {
+        if (currentUrl.contains("signup") || currentUrl.contains("flow") || currentUrl.contains("challenge")) {
+            kotlinx.coroutines.delay(1200)
+            val script = TwitterAutoPilot.buildAutoPilotScript(
+                name = currentProfileName.value,
+                phone = phoneNumber,
+                birthMonth = currentBirthDate.value.month,
+                birthDay = currentBirthDate.value.day,
+                birthYear = currentBirthDate.value.year,
+                password = password,
+                otp = latestOtp
+            )
+            webViewInstance?.evaluateJavascript(script, null)
         }
     }
 
@@ -523,7 +572,7 @@ fun BrowserScreen(
                                 modifier = Modifier.size(13.dp)
                             )
                             Spacer(modifier = Modifier.width(4.dp))
-                            Text("TG Bot ⚡", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = PrimaryBlue)
+                            Text("TG Bot", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = PrimaryBlue)
                         }
 
                         Spacer(modifier = Modifier.width(4.dp))
@@ -559,16 +608,20 @@ fun BrowserScreen(
                                             val acc = result.getOrNull()
                                             Toast.makeText(
                                                 context,
-                                                "✅ Real account saved: ${acc?.username}!\nCookies synced to Vault & Telegram.",
+                                                "Account verified: ${acc?.username}. Session saved to Vault.",
                                                 Toast.LENGTH_LONG
                                             ).show()
                                         } else {
                                             Toast.makeText(
                                                 context,
-                                                "⚠️ ${result.exceptionOrNull()?.message ?: "Not logged in yet. Please complete signup on X.com."}",
+                                                result.exceptionOrNull()?.message ?: "Not logged in yet. Please complete signup on X.com.",
                                                 Toast.LENGTH_LONG
                                             ).show()
                                         }
+                                    }
+                                } else {
+                                    Toast.makeText(context, "Engine not connected", Toast.LENGTH_SHORT).show()
+                                }
                                     }
                                 } else {
                                     Toast.makeText(context, "Engine not connected", Toast.LENGTH_SHORT).show()
@@ -734,24 +787,24 @@ fun BrowserScreen(
 
                         Spacer(modifier = Modifier.height(6.dp))
 
-                        // Proxy Route Row (Germany Face Verification Bypass & 6 OTPs per number)
+                        // Proxy Route Row (Multi-region & Random Location Mode)
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
                             Text(
-                                text = "Proxy Route: ${if (proxyCountry == "DE") "🇩🇪 Germany (Bypass Mode)" else "🇵🇱 Poland"}",
+                                text = "Proxy Route: ${if (proxyCountry == "RANDOM") "Random Locations (Active)" else "Region: $proxyCountry"}",
                                 fontSize = 11.sp,
                                 color = TextMuted,
                                 fontWeight = FontWeight.Medium
                             )
                             TextButton(
                                 onClick = {
-                                    val next = engine?.toggleProxyCountry() ?: "DE"
+                                    val next = engine?.toggleProxyCountry() ?: "RANDOM"
                                     Toast.makeText(
                                         context,
-                                        if (next == "DE") "🇩🇪 Germany Route: Face Verification Bypass & 6 OTPs active" else "🇵🇱 Poland Route active",
+                                        "Proxy Route: $next",
                                         Toast.LENGTH_SHORT
                                     ).show()
                                 },
@@ -760,7 +813,7 @@ fun BrowserScreen(
                             ) {
                                 Icon(Icons.Default.VpnKey, contentDescription = null, modifier = Modifier.size(12.dp))
                                 Spacer(modifier = Modifier.width(3.dp))
-                                Text(if (proxyCountry == "DE") "Switch to PL" else "Switch to DE (6 OTPs)", fontSize = 10.sp)
+                                Text("Switch Route", fontSize = 10.sp)
                             }
                         }
 
@@ -1050,7 +1103,7 @@ fun BrowserScreen(
                     onClick = {
                         Toast.makeText(
                             context,
-                            "🛡️ Titanium Shield: $blockedAdsCount ads & $blockedTrackersCount trackers blocked",
+                            "AdBlock Shield: $blockedAdsCount ads & $blockedTrackersCount trackers blocked",
                             Toast.LENGTH_SHORT
                         ).show()
                     },
@@ -1174,11 +1227,11 @@ fun BrowserScreen(
                 .padding(horizontal = 10.dp, vertical = 2.dp),
             horizontalArrangement = Arrangement.spacedBy(6.dp)
         ) {
-            BookmarkChip("𝕏 X.com") { navigateTo("https://x.com") }
-            BookmarkChip("📝 X Signup") { navigateTo("https://x.com/i/flow/signup") }
-            BookmarkChip("🔍 Google") { navigateTo("https://www.google.com") }
-            BookmarkChip("🦆 DuckDuckGo") { navigateTo("https://duckduckgo.com") }
-            BookmarkChip("🌐 Wikipedia") { navigateTo("https://en.m.wikipedia.org") }
+            BookmarkChip("X.com") { navigateTo("https://x.com") }
+            BookmarkChip("X Signup") { navigateTo("https://x.com/i/flow/signup") }
+            BookmarkChip("Google") { navigateTo("https://www.google.com") }
+            BookmarkChip("DuckDuckGo") { navigateTo("https://duckduckgo.com") }
+            BookmarkChip("Wikipedia") { navigateTo("https://en.m.wikipedia.org") }
         }
 
         Spacer(modifier = Modifier.height(2.dp))
@@ -1222,6 +1275,9 @@ fun BrowserScreen(
                         val cookieManager = CookieManager.getInstance()
                         cookieManager.setAcceptCookie(true)
                         cookieManager.setAcceptThirdPartyCookies(this, true)
+
+                        // Connect Twitter AutoPilot JavaScript Bridge
+                        addJavascriptInterface(autoPilot, "AndroidBridge")
 
                         // Integrated Download Manager
                         setDownloadListener { url, userAgent, contentDisposition, mimetype, _ ->
@@ -1329,6 +1385,20 @@ fun BrowserScreen(
                                 canGoBack = view?.canGoBack() == true
                                 canGoForward = view?.canGoForward() == true
                                 adBlockEngine.injectCosmeticAdHiding(view)
+
+                                // Trigger Twitter AutoPilot form-fill and challenge detection
+                                if (url != null && (url.contains("signup") || url.contains("flow") || url.contains("challenge"))) {
+                                    val script = TwitterAutoPilot.buildAutoPilotScript(
+                                        name = currentProfileName.value,
+                                        phone = phoneNumber,
+                                        birthMonth = currentBirthDate.value.month,
+                                        birthDay = currentBirthDate.value.day,
+                                        birthYear = currentBirthDate.value.year,
+                                        password = password,
+                                        otp = latestOtp
+                                    )
+                                    view?.evaluateJavascript(script, null)
+                                }
                             }
 
                             override fun onRenderProcessGone(

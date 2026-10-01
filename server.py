@@ -177,12 +177,12 @@ def dashboard():
         <div class="container">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
                 <div>
-                    <h1 style="margin: 0; font-size: 24px; color: #38BDF8;">⚡ AAA-X Cloud Orchestrator</h1>
+                    <h1 style="margin: 0; font-size: 24px; color: #38BDF8;">AAA-X Cloud Orchestrator</h1>
                     <p style="margin: 4px 0 0; color: #94A3B8; font-size: 13px;">Automated Cloud Worker deployed on Render</p>
                 </div>
                 <div>
-                    <span class="badge badge-de">🇩🇪 Region: Frankfurt, Germany</span>
-                    <span class="badge badge-live">● Cloud Active</span>
+                    <span class="badge badge-de">Region: Frankfurt, Germany</span>
+                    <span class="badge badge-live">Cloud Active</span>
                 </div>
             </div>
 
@@ -203,7 +203,7 @@ def dashboard():
 
                 <div class="card">
                     <h3 style="margin-top: 0; font-size: 14px; color: #94A3B8;">GERMAN BYPASS STATUS</h3>
-                    <div style="font-size: 16px; font-weight: 700; color: #34D399;">✓ ACTIVE (Frankfurt Egress)</div>
+                    <div style="font-size: 16px; font-weight: 700; color: #34D399;">Active (Frankfurt Egress)</div>
                     <p style="margin: 6px 0 0; font-size: 11px; color: #64748B;">Bypasses Twitter Face Verification checks</p>
                 </div>
             </div>

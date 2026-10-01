@@ -52,7 +52,7 @@ class CloudSyncRepository(
             for ((index, chunk) in chunks.withIndex()) {
                 val sb = StringBuilder()
                 val partLabel = if (chunks.size > 1) " (Part ${index + 1}/${chunks.size})" else ""
-                sb.append("📦 *AAA X-Orchestrator Batch Report*$partLabel\n")
+                sb.append("*AAA X-Orchestrator Batch Report*$partLabel\n")
                 sb.append("Batch Size: ${chunk.size} accounts (Total: ${accounts.size})\n")
                 sb.append("Timestamp: ${System.currentTimeMillis()}\n\n")
                 sb.append("```\n")
