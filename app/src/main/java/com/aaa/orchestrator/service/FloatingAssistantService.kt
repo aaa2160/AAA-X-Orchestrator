@@ -39,6 +39,7 @@ class FloatingAssistantService : Service() {
 
     private var windowManager: WindowManager? = null
     private var floatingView: View? = null
+    private var badgeTextView: TextView? = null
     private var phoneTextView: TextView? = null
     private var otpContainer: LinearLayout? = null
     private var otpTextView: TextView? = null
@@ -97,15 +98,16 @@ class FloatingAssistantService : Service() {
         }
 
         val badgeView = TextView(this).apply {
-            text = "2NR"
+            text = if (currentPhone.startsWith("+48")) "2NR" else "TG BOT"
             textSize = 9f
             setTextColor(Color.WHITE)
             setPadding(dpToPx(5), dpToPx(2), dpToPx(5), dpToPx(2))
             background = GradientDrawable().apply {
-                setColor(Color.parseColor("#0284C7")) // 2nr Blue
+                setColor(Color.parseColor("#0284C7")) // Accent Blue
                 cornerRadius = dpToPx(4).toFloat()
             }
         }
+        badgeTextView = badgeView
 
         val titleView = TextView(this).apply {
             text = " Companion"
@@ -309,6 +311,7 @@ class FloatingAssistantService : Service() {
     private fun onPhoneChanged(phone: String) {
         phoneTextView?.post {
             phoneTextView?.text = phone
+            badgeTextView?.text = if (phone.startsWith("+48")) "2NR" else "TG BOT"
         }
     }
 

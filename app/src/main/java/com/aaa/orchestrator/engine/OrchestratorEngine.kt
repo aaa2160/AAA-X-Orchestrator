@@ -70,10 +70,18 @@ class OrchestratorEngine(
             )
         }
 
-        // Connect real SMS notification listener
+        // Connect real SMS / Telegram notification listener
         SmsNotificationListener.onOtpReceived = { code ->
             _latestOtp.value = code
-            Timber.i("OrchestratorEngine received real SMS OTP: $code")
+            Timber.i("OrchestratorEngine received real SMS / Telegram OTP: $code")
+        }
+
+        // Connect real Accessibility Service phone detection (2nr & @EHR_QUICKINCOME_BOT)
+        com.aaa.orchestrator.service.OrchestratorAccessibilityService.onPhoneDetected = { detectedPhone ->
+            _activePhoneNumber.value = detectedPhone
+            telephonyRepo.setSlotPhoneNumber(telephonyRepo.getActiveSlot().slotIndex, detectedPhone)
+            _metrics.value = _metrics.value.copy(currentSlotInfo = telephonyRepo.getSlotSummary())
+            Timber.i("OrchestratorEngine automatically configured active phone: $detectedPhone")
         }
     }
 

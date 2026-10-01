@@ -2,6 +2,24 @@
 
 All notable changes and architectural configurations for this project are documented here.
 
+## [1.8.0] - 2026-10-01
+
+### Added & Enhanced
+- **Automatic @EHR_QUICKINCOME_BOT Telegram Integration ([`OrchestratorAccessibilityService.kt`](file:///root/project/AAAX/app/src/main/java/com/aaa/orchestrator/service/OrchestratorAccessibilityService.kt))**:
+  - Added automated node hierarchy inspection for Telegram packages (`org.telegram.messenger`, `org.telegram.plus`, `org.thunderdog.challegram`).
+  - Automatically finds and clicks `+ GET NUMBER` on `@EHR_QUICKINCOME_BOT`.
+  - Automatically parses phone numbers (e.g. `+2348091267977`) from the bot's inline button responses and updates active telephony state.
+  - Automatically brings AAA-X Browser back to the front immediately after number capture with zero manual app switching.
+- **Telegram OTP Interception ([`SmsNotificationListener.kt`](file:///root/project/AAAX/app/src/main/java/com/aaa/orchestrator/service/SmsNotificationListener.kt))**:
+  - Expanded notification listener to intercept incoming push notifications from Telegram, `@EHR_QUICKINCOME_BOT`, and the Telegram OTP Group.
+  - Automatically extracts 6-digit Twitter/X OTP verification codes and triggers auto-fill.
+- **Hands-Free Auto-Injection ([`BrowserScreen.kt`](file:///root/project/AAAX/app/src/main/java/com/aaa/orchestrator/ui/screens/BrowserScreen.kt))**:
+  - Added `LaunchedEffect` hooks that auto-fill the detected phone number into Twitter signup forms upon detection.
+  - Automatically injects the received OTP code directly into the verification field without user typing.
+  - Added 1-tap `TG Bot ⚡` launcher button to the Browser HUD bar.
+- **Standalone Python Telegram Worker ([`telegram_worker.py`](file:///root/project/AAAX/telegram_worker.py))**:
+  - Created Telethon MTProto worker script that automates `@EHR_QUICKINCOME_BOT`, captures numbers/OTPs, and forwards them directly to the Render cloud backend (`https://aaa-x-cloud-worker.onrender.com/api/phone` and `/api/otp`).
+
 ## [1.7.0] - 2026-10-01
 
 ### Added & Enhanced

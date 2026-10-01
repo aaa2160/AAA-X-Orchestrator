@@ -24,10 +24,13 @@ class OrchestratorAccessibilityService : AccessibilityService() {
     }
 
     private var lastDetectedPhone: String? = null
+    private var lastBotClickTime = 0L
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         if (event == null) return
         val packageName = event.packageName?.toString() ?: ""
+
+        // 1. 2nr / Polish virtual number detection
         if (packageName.contains("pl.rs.sip.softphone", ignoreCase = true) ||
             packageName.contains("m2nr", ignoreCase = true) ||
             packageName.contains("two_nr", ignoreCase = true) ||
@@ -47,6 +50,86 @@ class OrchestratorAccessibilityService : AccessibilityService() {
                 Timber.w(e, "Error inspecting 2nr node hierarchy")
             }
         }
+
+        // 2. Telegram @EHR_QUICKINCOME_BOT automated interaction
+        val isTelegram = packageName.contains("org.telegram.messenger", ignoreCase = true) ||
+                packageName.contains("org.telegram.plus", ignoreCase = true) ||
+                packageName.contains("org.thunderdog.challegram", ignoreCase = true) ||
+                packageName.contains("telegram", ignoreCase = true)
+
+        if (isTelegram) {
+            try {
+                val rootNode = rootInActiveWindow ?: return
+                handleTelegramBotInteraction(rootNode)
+            } catch (e: Exception) {
+                Timber.w(e, "Error inspecting Telegram node hierarchy")
+            }
+        }
+    }
+
+    private fun handleTelegramBotInteraction(rootNode: android.view.accessibility.AccessibilityNodeInfo) {
+        // Step A: Find and automatically click "+ GET NUMBER" if available
+        val now = System.currentTimeMillis()
+        if (now - lastBotClickTime > 4000) {
+            val getNumberNode = findNodeWithText(rootNode, listOf("+ GET NUMBER", "GET NUMBER", "+GET NUMBER"))
+            if (getNumberNode != null && (getNumberNode.isClickable || getNumberNode.parent?.isClickable == true)) {
+                val target = if (getNumberNode.isClickable) getNumberNode else getNumberNode.parent
+                val clicked = target?.performAction(android.view.accessibility.AccessibilityNodeInfo.ACTION_CLICK) ?: false
+                if (clicked) {
+                    lastBotClickTime = now
+                    Timber.i("AUTOMATICALLY CLICKED '+ GET NUMBER' IN @EHR_QUICKINCOME_BOT!")
+                }
+            }
+        }
+
+        // Step B: Search for generated international phone number in inline buttons or messages
+        val botPhone = findBotPhoneNumberInNode(rootNode)
+        if (botPhone != null && botPhone != lastDetectedPhone) {
+            lastDetectedPhone = botPhone
+            Timber.i("AUTOMATICALLY CAPTURED PHONE NUMBER FROM @EHR_QUICKINCOME_BOT: $botPhone")
+            onPhoneDetected?.invoke(botPhone)
+            FloatingAssistantService.updatePhone(botPhone)
+
+            // Automatically switch back to AAA-X Orchestrator
+            FloatingAssistantService.bringOrchestratorToFront(this)
+        }
+    }
+
+    private fun findNodeWithText(
+        node: android.view.accessibility.AccessibilityNodeInfo?,
+        targets: List<String>
+    ): android.view.accessibility.AccessibilityNodeInfo? {
+        if (node == null) return null
+        val text = node.text?.toString() ?: ""
+        val desc = node.contentDescription?.toString() ?: ""
+        for (target in targets) {
+            if (text.contains(target, ignoreCase = true) || desc.contains(target, ignoreCase = true)) {
+                return node
+            }
+        }
+        for (i in 0 until node.childCount) {
+            val found = findNodeWithText(node.getChild(i), targets)
+            if (found != null) return found
+        }
+        return null
+    }
+
+    private fun findBotPhoneNumberInNode(node: android.view.accessibility.AccessibilityNodeInfo?): String? {
+        if (node == null) return null
+        val text = node.text?.toString() ?: ""
+        val phone = extractBotPhoneNumber(text)
+        if (phone != null) return phone
+
+        val desc = node.contentDescription?.toString() ?: ""
+        val phoneFromDesc = extractBotPhoneNumber(desc)
+        if (phoneFromDesc != null) return phoneFromDesc
+
+        for (i in 0 until node.childCount) {
+            val child = node.getChild(i)
+            val found = findBotPhoneNumberInNode(child)
+            if (found != null) return found
+        }
+        return null
     }
 
     private fun findPhoneNumberInNode(node: android.view.accessibility.AccessibilityNodeInfo?): String? {
@@ -65,20 +148,6 @@ class OrchestratorAccessibilityService : AccessibilityService() {
             if (found != null) return found
         }
         return null
-    }
-
-    private fun extractPolishPhone(text: String): String? {
-        if (text.isBlank()) return null
-        val regex = Regex("(\\+48[\\s-]?)?([4-9]\\d{2}[\\s-]?\\d{3}[\\s-]?\\d{3})")
-        val match = regex.find(text) ?: return null
-        val rawDigits = match.value.filter { it.isDigit() }
-        return if (rawDigits.startsWith("48") && rawDigits.length == 11) {
-            "+$rawDigits"
-        } else if (rawDigits.length == 9) {
-            "+48$rawDigits"
-        } else if (rawDigits.length == 11) {
-            "+$rawDigits"
-        } else null
     }
 
     override fun onInterrupt() {
@@ -148,5 +217,26 @@ class OrchestratorAccessibilityService : AccessibilityService() {
         val isAutomationRunning = AtomicBoolean(false)
         var onKillSwitchTriggered: (() -> Unit)? = null
         var onPhoneDetected: ((String) -> Unit)? = null
+
+        fun extractBotPhoneNumber(text: String): String? {
+            if (text.isBlank()) return null
+            // Matches international format: +[country_code][number], e.g. +2348091267977 or +48459074091
+            val match = Regex("\\+([0-9]{9,15})").find(text) ?: return null
+            return match.value
+        }
+
+        fun extractPolishPhone(text: String): String? {
+            if (text.isBlank()) return null
+            val regex = Regex("(\\+48[\\s-]?)?([4-9]\\d{2}[\\s-]?\\d{3}[\\s-]?\\d{3})")
+            val match = regex.find(text) ?: return null
+            val rawDigits = match.value.filter { it.isDigit() }
+            return if (rawDigits.startsWith("48") && rawDigits.length == 11) {
+                "+$rawDigits"
+            } else if (rawDigits.length == 9) {
+                "+48$rawDigits"
+            } else if (rawDigits.length == 11) {
+                "+$rawDigits"
+            } else null
+        }
     }
 }

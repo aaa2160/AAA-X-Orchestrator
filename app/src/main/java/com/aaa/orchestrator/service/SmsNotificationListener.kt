@@ -17,23 +17,34 @@ class SmsNotificationListener : NotificationListenerService() {
         val text = extras.getCharSequence("android.text")?.toString() ?: ""
         val title = extras.getCharSequence("android.title")?.toString() ?: ""
 
-        // Check if notification is from the real 2nr Android app or messaging services
+        // Check if notification is from 2nr, Telegram, or messaging services
         val isTargetApp = packageName.contains("pl.rs.sip.softphone", ignoreCase = true) ||
                 packageName.contains("m2nr", ignoreCase = true) ||
                 packageName.contains("two_nr", ignoreCase = true) ||
                 packageName.contains("2nr", ignoreCase = true) ||
                 packageName.contains("softphone", ignoreCase = true) ||
+                packageName.contains("org.telegram.messenger", ignoreCase = true) ||
+                packageName.contains("org.telegram.plus", ignoreCase = true) ||
+                packageName.contains("org.thunderdog.challegram", ignoreCase = true) ||
+                packageName.contains("telegram", ignoreCase = true) ||
                 packageName.contains("sms", ignoreCase = true) ||
                 packageName.contains("mobi", ignoreCase = true) ||
                 packageName.contains("messaging", ignoreCase = true) ||
                 title.contains("2nr", ignoreCase = true) ||
-                text.contains("2nr", ignoreCase = true)
+                title.contains("EHR", ignoreCase = true) ||
+                title.contains("Quick", ignoreCase = true) ||
+                title.contains("Telegram", ignoreCase = true) ||
+                title.contains("OTP", ignoreCase = true) ||
+                text.contains("2nr", ignoreCase = true) ||
+                text.contains("EHR", ignoreCase = true) ||
+                text.contains("Twitter", ignoreCase = true) ||
+                text.contains("code", ignoreCase = true)
 
         if (isTargetApp) {
             Timber.i("Incoming notification from $packageName: $title - $text")
             val code = extractOtp(text) ?: extractOtp(title)
             if (code != null) {
-                Timber.i("EXTRACTED SMS OTP CODE: $code")
+                Timber.i("EXTRACTED SMS / TELEGRAM OTP CODE: $code")
                 onOtpReceived?.invoke(code)
                 FloatingAssistantService.updateOtp(code)
             }

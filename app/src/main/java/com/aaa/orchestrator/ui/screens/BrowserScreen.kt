@@ -113,6 +113,21 @@ fun BrowserScreen(
     val latestOtp by (engine?.latestOtp ?: remember { MutableStateFlow<String?>(null) }).collectAsState()
     val proxyCountry by (engine?.proxyCountry ?: remember { MutableStateFlow("DE") }).collectAsState()
 
+    // Auto-inject incoming OTP into Twitter signup form instantly
+    LaunchedEffect(latestOtp) {
+        if (!latestOtp.isNullOrBlank()) {
+            injectValueIntoInput(webViewInstance, latestOtp!!)
+            Toast.makeText(context, "⚡ Auto-filled OTP code: $latestOtp", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    // Auto-inject detected phone number if on signup page
+    LaunchedEffect(phoneNumber) {
+        if (phoneNumber.isNotBlank() && (currentUrl.contains("signup") || currentUrl.contains("flow"))) {
+            injectValueIntoInput(webViewInstance, phoneNumber)
+        }
+    }
+
     val mobileUserAgent = "Mozilla/5.0 (Linux; Android 11; SM-A305F) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Mobile Safari/537.36"
     val desktopUserAgent = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36"
 
@@ -488,7 +503,27 @@ fun BrowserScreen(
                                 modifier = Modifier.size(13.dp)
                             )
                             Spacer(modifier = Modifier.width(4.dp))
-                            Text("Open 2nr", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = SuccessGreen)
+                            Text("2nr", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = SuccessGreen)
+                        }
+
+                        Spacer(modifier = Modifier.width(4.dp))
+
+                        // 1-Tap Telegram @EHR_QUICKINCOME_BOT Auto-Fetch Launcher
+                        FilledTonalButton(
+                            onClick = { AppLauncher.openTelegramBot(context, "EHR_QUICKINCOME_BOT", launchOverlay = true) },
+                            shape = RoundedCornerShape(8.dp),
+                            colors = ButtonDefaults.filledTonalButtonColors(containerColor = SoftBlueTile),
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                            modifier = Modifier.height(30.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Send,
+                                contentDescription = "Telegram Bot",
+                                tint = PrimaryBlue,
+                                modifier = Modifier.size(13.dp)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("TG Bot ⚡", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = PrimaryBlue)
                         }
 
                         Spacer(modifier = Modifier.width(4.dp))
