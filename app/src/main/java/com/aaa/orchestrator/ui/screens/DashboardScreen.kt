@@ -48,10 +48,13 @@ fun DashboardScreen(
     onOpenBrowser: () -> Unit = {},
     onOpenAutomation: () -> Unit = {},
     onNavigateToVault: () -> Unit = {},
+    onUpdatePhone: (String) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
     val scrollState = rememberScrollState()
+    var showSetPhoneDialog by remember { mutableStateOf(false) }
+    var phoneInput by remember { mutableStateOf("") }
 
     Column(
         modifier = modifier
@@ -344,6 +347,18 @@ fun DashboardScreen(
 
                     FilledTonalButton(
                         onClick = {
+                            showSetPhoneDialog = true
+                        },
+                        shape = RoundedCornerShape(8.dp),
+                        colors = ButtonDefaults.filledTonalButtonColors(containerColor = SurfaceWhite),
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                        modifier = Modifier.height(30.dp)
+                    ) {
+                        Text("Paste", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = PrimaryBlue)
+                    }
+
+                    FilledTonalButton(
+                        onClick = {
                             val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                             val clip = ClipData.newPlainText("Cloud Phone", metrics.currentSlotInfo)
                             clipboard.setPrimaryClip(clip)
@@ -432,6 +447,72 @@ fun DashboardScreen(
                 }
             }
         }
+    }
+
+    if (showSetPhoneDialog) {
+        AlertDialog(
+            onDismissRequest = { showSetPhoneDialog = false },
+            title = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.PhoneAndroid, contentDescription = null, tint = PrimaryBlue)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Telegram Bot Phone Number")
+                }
+            },
+            text = {
+                Column {
+                    Text(
+                        "Paste or enter the genuine phone number received from @EHR_QUICKINCOME_BOT:",
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(10.dp))
+                    OutlinedTextField(
+                        value = phoneInput,
+                        onValueChange = { phoneInput = it },
+                        label = { Text("Bot Phone Number") },
+                        placeholder = { Text("+1234567890") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    TextButton(
+                        onClick = {
+                            val clipMgr = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
+                            val clip = clipMgr?.primaryClip?.getItemAt(0)?.text?.toString()?.trim()
+                            if (!clip.isNullOrBlank()) {
+                                phoneInput = clip
+                            } else {
+                                Toast.makeText(context, "Clipboard is empty", Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                    ) {
+                        Icon(Icons.Default.ContentPaste, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Paste from Clipboard", fontSize = 12.sp)
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        if (phoneInput.isNotBlank()) {
+                            onUpdatePhone(phoneInput.trim())
+                            showSetPhoneDialog = false
+                            Toast.makeText(context, "Telegram Bot Phone updated: ${phoneInput.trim()}", Toast.LENGTH_SHORT).show()
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = PrimaryBlue)
+                ) {
+                    Text("Save & Apply")
+                }
+            },
+            dismissButton = {
+                OutlinedButton(onClick = { showSetPhoneDialog = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
     }
 }
 

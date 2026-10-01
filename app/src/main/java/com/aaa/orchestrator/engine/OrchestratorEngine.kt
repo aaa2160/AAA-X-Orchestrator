@@ -41,7 +41,7 @@ class OrchestratorEngine(
     private val _metrics = MutableStateFlow(DashboardMetrics())
     val metrics: StateFlow<DashboardMetrics> = _metrics.asStateFlow()
 
-    private val _activePhoneNumber = MutableStateFlow("+2348091267977")
+    private val _activePhoneNumber = MutableStateFlow("")
     val activePhoneNumber: StateFlow<String> = _activePhoneNumber.asStateFlow()
 
     private val _activePassword = MutableStateFlow(PasswordSynthesizer.generatePassword())
@@ -61,7 +61,9 @@ class OrchestratorEngine(
             val total = accountRepository.getTotalAccountCount()
             val pending = accountRepository.getPendingCount()
             val slot = telephonyRepo.getActiveSlot()
-            _activePhoneNumber.value = slot.phoneNumber
+            if (slot != null && slot.phoneNumber.isNotBlank()) {
+                _activePhoneNumber.value = slot.phoneNumber
+            }
             _metrics.value = _metrics.value.copy(
                 totalCreated = total,
                 pendingSyncCount = pending,
@@ -78,10 +80,13 @@ class OrchestratorEngine(
 
         // Connect real Accessibility Service phone detection (Telegram & Cloud SMS)
         com.aaa.orchestrator.service.OrchestratorAccessibilityService.onPhoneDetected = { detectedPhone ->
-            _activePhoneNumber.value = detectedPhone
-            telephonyRepo.setSlotPhoneNumber(telephonyRepo.getActiveSlot().slotIndex, detectedPhone)
-            _metrics.value = _metrics.value.copy(currentSlotInfo = telephonyRepo.getSlotSummary())
-            Timber.i("OrchestratorEngine automatically configured active phone: $detectedPhone")
+            if (detectedPhone.isNotBlank()) {
+                _activePhoneNumber.value = detectedPhone
+                val slotIdx = telephonyRepo.getActiveSlot()?.slotIndex ?: 1
+                telephonyRepo.setSlotPhoneNumber(slotIdx, detectedPhone)
+                _metrics.value = _metrics.value.copy(currentSlotInfo = telephonyRepo.getSlotSummary())
+                Timber.i("OrchestratorEngine received real Telegram Bot phone: $detectedPhone")
+            }
         }
 
         // Poll Render Cloud for real phone number and inbound OTPs from Telegram worker
@@ -92,9 +97,10 @@ class OrchestratorEngine(
                     val cloudPhone = cloudSyncRepo.fetchCloudActivePhone()
                     if (!cloudPhone.isNullOrBlank() && cloudPhone != _activePhoneNumber.value) {
                         _activePhoneNumber.value = cloudPhone
-                        telephonyRepo.setSlotPhoneNumber(telephonyRepo.getActiveSlot().slotIndex, cloudPhone)
+                        val slotIdx = telephonyRepo.getActiveSlot()?.slotIndex ?: 1
+                        telephonyRepo.setSlotPhoneNumber(slotIdx, cloudPhone)
                         _metrics.value = _metrics.value.copy(currentSlotInfo = telephonyRepo.getSlotSummary())
-                        Timber.i("Cloud phone synced to Orchestrator: $cloudPhone")
+                        Timber.i("Cloud phone synced to Orchestrator from Telegram: $cloudPhone")
                     }
 
                     // Check cloud latest OTP
@@ -165,15 +171,21 @@ class OrchestratorEngine(
             )
 
             val activeSlot = telephonyRepo.getActiveSlot()
-            _activePhoneNumber.value = activeSlot.phoneNumber
+            val phone = activeSlot?.phoneNumber ?: _activePhoneNumber.value
+            if (phone.isBlank()) {
+                _state.value = OrchestratorState.PausedThrottled("Please acquire a real phone number from Telegram Bot (@EHR_QUICKINCOME_BOT) before starting.")
+                _metrics.value = _metrics.value.copy(isRunning = false)
+                return@launch
+            }
+            _activePhoneNumber.value = phone
             _activePassword.value = PasswordSynthesizer.generatePassword()
             _latestOtp.value = null
 
             // Step 3: Target Dispatch - Direct real browser to X.com Signup
             _state.value = OrchestratorState.TargetDispatch("https://x.com/i/flow/signup")
             _state.value = OrchestratorState.TelephonyLoop(
-                slotNumber = activeSlot.slotIndex,
-                phoneNumber = activeSlot.phoneNumber
+                slotNumber = activeSlot?.slotIndex ?: 1,
+                phoneNumber = phone
             )
 
             // Step 4: Real Session Detection Loop

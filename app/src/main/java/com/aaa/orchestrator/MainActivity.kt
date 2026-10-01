@@ -170,6 +170,7 @@ class MainActivity : ComponentActivity() {
                                 onOpenBrowser = { selectedTab = NavTab.Browser },
                                 onOpenAutomation = { selectedTab = NavTab.Automation },
                                 onNavigateToVault = { selectedTab = NavTab.Vault },
+                                onUpdatePhone = { engine.updateActivePhoneNumber(it) },
                                 modifier = Modifier.fillMaxSize()
                             )
                             NavTab.Browser -> BrowserScreen(

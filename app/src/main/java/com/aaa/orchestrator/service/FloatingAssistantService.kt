@@ -156,7 +156,7 @@ class FloatingAssistantService : Service() {
         }
 
         phoneTextView = TextView(this).apply {
-            text = currentPhone
+            text = if (currentPhone.isNotBlank()) currentPhone else "Awaiting TG Bot Number"
             textSize = 12f
             setTextColor(Color.parseColor("#38BDF8"))
             typeface = android.graphics.Typeface.MONOSPACE
@@ -294,8 +294,12 @@ class FloatingAssistantService : Service() {
     }
 
     private fun copyPhoneToClipboard() {
+        if (currentPhone.isBlank()) {
+            Toast.makeText(this, "Awaiting Telegram Bot Number", Toast.LENGTH_SHORT).show()
+            return
+        }
         val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-        val clip = ClipData.newPlainText("Cloud Phone", currentPhone)
+        val clip = ClipData.newPlainText("Telegram Bot Phone", currentPhone)
         clipboard.setPrimaryClip(clip)
         Toast.makeText(this, "Copied $currentPhone", Toast.LENGTH_SHORT).show()
     }
@@ -310,7 +314,7 @@ class FloatingAssistantService : Service() {
 
     private fun onPhoneChanged(phone: String) {
         phoneTextView?.post {
-            phoneTextView?.text = phone
+            phoneTextView?.text = if (phone.isNotBlank()) phone else "Awaiting TG Bot Number"
             badgeTextView?.text = "TG BOT"
         }
     }
@@ -343,7 +347,7 @@ class FloatingAssistantService : Service() {
 
     companion object {
         private var instance: FloatingAssistantService? = null
-        var currentPhone: String = "+2348091267977"
+        var currentPhone: String = ""
             set(value) {
                 field = value
                 instance?.onPhoneChanged(value)

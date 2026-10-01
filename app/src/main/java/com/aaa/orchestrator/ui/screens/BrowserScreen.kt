@@ -111,6 +111,23 @@ fun BrowserScreen(
     var showMediaController by remember { mutableStateOf(false) }
     var playbackSpeed by remember { mutableStateOf(1.0f) }
     var detectedVideoUrl by remember { mutableStateOf<String?>(null) }
+    var currentAspectRatioIndex by remember { mutableStateOf(0) }
+    val aspectRatios = listOf("fit", "fill", "16:9", "4:3", "stretch")
+    var isAudioBoosted by remember { mutableStateOf(false) }
+    var isScreenLocked by remember { mutableStateOf(false) }
+
+    // Professional Browser Tools State
+    var isReaderModeActive by remember { mutableStateOf(false) }
+    var isForceDarkMode by remember { mutableStateOf(false) }
+    var showSearchEngineDialog by remember { mutableStateOf(false) }
+    var selectedSearchEngine by remember { mutableStateOf("Google") }
+    val searchEngines = mapOf(
+        "Google" to "https://www.google.com/search?q=",
+        "DuckDuckGo" to "https://duckduckgo.com/?q=",
+        "Brave Search" to "https://search.brave.com/search?q=",
+        "Bing" to "https://www.bing.com/search?q=",
+        "Ecosia" to "https://www.ecosia.org/search?q="
+    )
 
     // MX Player Gesture HUD State
     var gestureHudText by remember { mutableStateOf<String?>(null) }
@@ -136,7 +153,7 @@ fun BrowserScreen(
 
     // Engine bindings
     val state by (engine?.state ?: remember { MutableStateFlow<OrchestratorState>(OrchestratorState.Idle) }).collectAsState()
-    val phoneNumber by (engine?.activePhoneNumber ?: remember { MutableStateFlow("+2348091267977") }).collectAsState()
+    val phoneNumber by (engine?.activePhoneNumber ?: remember { MutableStateFlow("") }).collectAsState()
     val password by (engine?.activePassword ?: remember { MutableStateFlow("AAA_Auto_2026") }).collectAsState()
     val latestOtp by (engine?.latestOtp ?: remember { MutableStateFlow<String?>(null) }).collectAsState()
     val proxyCountry by (engine?.proxyCountry ?: remember { MutableStateFlow("DE") }).collectAsState()
@@ -326,6 +343,124 @@ fun BrowserScreen(
         }
     }
 
+    fun cycleAspectRatio() {
+        currentAspectRatioIndex = (currentAspectRatioIndex + 1) % aspectRatios.size
+        val mode = aspectRatios[currentAspectRatioIndex]
+        val (cssMode, label) = when (mode) {
+            "fit" -> Pair("contain", "Fit Screen")
+            "fill" -> Pair("cover", "Crop / Fill")
+            "16:9" -> Pair("contain", "16:9 Aspect")
+            "4:3" -> Pair("contain", "4:3 Aspect")
+            "stretch" -> Pair("fill", "Stretch Full")
+            else -> Pair("contain", "Fit")
+        }
+        showGestureFeedback(Icons.Default.AspectRatio, "Aspect: $label")
+        activeWebView?.evaluateJavascript(
+            """
+            (function() {
+                var videos = document.querySelectorAll('video');
+                for (var i = 0; i < videos.length; i++) {
+                    videos[i].style.objectFit = '$cssMode';
+                }
+            })();
+            """.trimIndent(), null
+        )
+    }
+
+    fun toggleAudioBoost() {
+        isAudioBoosted = !isAudioBoosted
+        val gain = if (isAudioBoosted) 2.0f else 1.0f
+        val label = if (isAudioBoosted) "Audio Boost: 200%" else "Audio Boost: 100%"
+        showGestureFeedback(Icons.Default.VolumeUp, label)
+        activeWebView?.evaluateJavascript(
+            """
+            (function() {
+                var v = document.querySelector('video') || document.querySelector('audio');
+                if (!v) return;
+                try {
+                    if (!window._audioBoostCtx) {
+                        window._audioBoostCtx = new (window.AudioContext || window.webkitAudioContext)();
+                        window._audioSource = window._audioBoostCtx.createMediaElementSource(v);
+                        window._audioGain = window._audioBoostCtx.createGain();
+                        window._audioSource.connect(window._audioGain);
+                        window._audioGain.connect(window._audioBoostCtx.destination);
+                    }
+                    window._audioGain.gain.value = $gain;
+                } catch(e) { console.log('Audio boost error', e); }
+            })();
+            """.trimIndent(), null
+        )
+    }
+
+    fun toggleReaderMode() {
+        isReaderModeActive = !isReaderModeActive
+        if (isReaderModeActive) {
+            activeWebView?.evaluateJavascript(
+                """
+                (function() {
+                    if (window._originalBody) return;
+                    window._originalBody = document.body.innerHTML;
+                    var article = document.querySelector('article') || document.querySelector('main') || document.body;
+                    var title = document.title;
+                    var paragraphs = article.querySelectorAll('p, h1, h2, h3, img');
+                    var content = '';
+                    paragraphs.forEach(function(el) {
+                        if (el.tagName === 'IMG') {
+                            if (el.src) content += '<img src="' + el.src + '" style="max-width:100%;border-radius:12px;margin:16px 0;" />';
+                        } else {
+                            content += '<' + el.tagName.toLowerCase() + '>' + el.innerHTML + '</' + el.tagName.toLowerCase() + '>';
+                        }
+                    });
+                    document.body.innerHTML = '<div id="clean-reader-view" style="max-width:680px;margin:0 auto;padding:24px 16px;font-family:sans-serif;font-size:18px;line-height:1.7;color:#1e293b;background:#fafafa;"><h1>' + title + '</h1>' + content + '</div>';
+                })();
+                """.trimIndent(), null
+            )
+            Toast.makeText(context, "Reader Mode Activated", Toast.LENGTH_SHORT).show()
+        } else {
+            activeWebView?.evaluateJavascript(
+                """
+                (function() {
+                    if (window._originalBody) {
+                        document.body.innerHTML = window._originalBody;
+                        window._originalBody = null;
+                    }
+                })();
+                """.trimIndent(), null
+            )
+            Toast.makeText(context, "Reader Mode Deactivated", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    fun toggleForceDarkMode() {
+        isForceDarkMode = !isForceDarkMode
+        activeWebView?.evaluateJavascript(
+            """
+            (function() {
+                var el = document.getElementById('force-dark-mode-style');
+                if (el) {
+                    el.remove();
+                } else {
+                    var style = document.createElement('style');
+                    style.id = 'force-dark-mode-style';
+                    style.innerHTML = 'html { filter: invert(90%) hue-rotate(180deg) !important; background: #121212 !important; } img, video, iframe, canvas { filter: invert(100%) hue-rotate(180deg) !important; }';
+                    document.head.appendChild(style);
+                }
+            })();
+            """.trimIndent(), null
+        )
+        Toast.makeText(context, if (isForceDarkMode) "Dark Reader: ON" else "Dark Reader: OFF", Toast.LENGTH_SHORT).show()
+    }
+
+    fun clearSiteData() {
+        val cm = CookieManager.getInstance()
+        cm.removeAllCookies(null)
+        cm.flush()
+        WebStorage.getInstance().deleteAllData()
+        activeWebView?.clearCache(true)
+        activeWebView?.clearFormData()
+        Toast.makeText(context, "Site cookies, cache, and storage cleared", Toast.LENGTH_SHORT).show()
+    }
+
     // Chrome-Style Hardware Back Navigation: exit fullscreen video -> close find bar -> go back
     BackHandler(enabled = customVideoView != null || isFindInPageVisible || canGoBack) {
         when {
@@ -480,10 +615,15 @@ fun BrowserScreen(
 
     // Helper to evaluate Twitter AutoPilot script on the active WebView
     fun runAutoPilotOnActiveTab() {
-        val targetPhone = if (phoneNumber.isNotBlank()) phoneNumber else "+2348091267977"
+        if (phoneNumber.isBlank()) {
+            Toast.makeText(context, "Awaiting Telegram Bot Phone Number (@EHR_QUICKINCOME_BOT)", Toast.LENGTH_SHORT).show()
+            phoneInputText = ""
+            showPhoneEditDialog = true
+            return
+        }
         val script = TwitterAutoPilot.buildAutoPilotScript(
             name = currentProfileName.value,
-            phone = targetPhone,
+            phone = phoneNumber,
             birthMonth = currentBirthDate.value.month,
             birthDay = currentBirthDate.value.day,
             birthYear = currentBirthDate.value.year,
@@ -576,17 +716,18 @@ fun BrowserScreen(
                     if (isAutomationMode && newProgress >= 70) {
                         val currentWebUrl = view?.url ?: ""
                         if (currentWebUrl.contains("signup") || currentWebUrl.contains("flow") || currentWebUrl.contains("x.com")) {
-                            val targetPhone = if (phoneNumber.isNotBlank()) phoneNumber else "+2348091267977"
-                            val script = TwitterAutoPilot.buildAutoPilotScript(
-                                name = currentProfileName.value,
-                                phone = targetPhone,
-                                birthMonth = currentBirthDate.value.month,
-                                birthDay = currentBirthDate.value.day,
-                                birthYear = currentBirthDate.value.year,
-                                password = password,
-                                otp = latestOtp
-                            )
-                            view?.evaluateJavascript(script, null)
+                            if (phoneNumber.isNotBlank()) {
+                                val script = TwitterAutoPilot.buildAutoPilotScript(
+                                    name = currentProfileName.value,
+                                    phone = phoneNumber,
+                                    birthMonth = currentBirthDate.value.month,
+                                    birthDay = currentBirthDate.value.day,
+                                    birthYear = currentBirthDate.value.year,
+                                    password = password,
+                                    otp = latestOtp
+                                )
+                                view?.evaluateJavascript(script, null)
+                            }
                         }
                     }
                 }
@@ -761,17 +902,18 @@ fun BrowserScreen(
 
                     // Inject Twitter AutoPilot ONLY if in automation mode on signup/flow/challenge
                     if (isAutomationMode && url != null && (url.contains("signup") || url.contains("flow") || url.contains("challenge") || url.contains("x.com"))) {
-                        val targetPhone = if (phoneNumber.isNotBlank()) phoneNumber else "+2348091267977"
-                        val script = TwitterAutoPilot.buildAutoPilotScript(
-                            name = currentProfileName.value,
-                            phone = targetPhone,
-                            birthMonth = currentBirthDate.value.month,
-                            birthDay = currentBirthDate.value.day,
-                            birthYear = currentBirthDate.value.year,
-                            password = password,
-                            otp = latestOtp
-                        )
-                        view?.evaluateJavascript(script, null)
+                        if (phoneNumber.isNotBlank()) {
+                            val script = TwitterAutoPilot.buildAutoPilotScript(
+                                name = currentProfileName.value,
+                                phone = phoneNumber,
+                                birthMonth = currentBirthDate.value.month,
+                                birthDay = currentBirthDate.value.day,
+                                birthYear = currentBirthDate.value.year,
+                                password = password,
+                                otp = latestOtp
+                            )
+                            view?.evaluateJavascript(script, null)
+                        }
                     }
                 }
             }
@@ -886,10 +1028,11 @@ fun BrowserScreen(
                             keyboardActions = KeyboardActions(
                                 onGo = {
                                     focusManager.clearFocus()
+                                    val searchBase = searchEngines[selectedSearchEngine] ?: "https://www.google.com/search?q="
                                     val formatted = when {
                                         inputUrl.startsWith("http://") || inputUrl.startsWith("https://") -> inputUrl
                                         inputUrl.contains(".") && !inputUrl.contains(" ") -> "https://$inputUrl"
-                                        else -> "https://www.google.com/search?q=" + java.net.URLEncoder.encode(inputUrl, "UTF-8")
+                                        else -> searchBase + java.net.URLEncoder.encode(inputUrl, "UTF-8")
                                     }
                                     activeWebView?.loadUrl(formatted)
                                 }
@@ -901,7 +1044,7 @@ fun BrowserScreen(
                                 ) {
                                     if (inputUrl.isEmpty()) {
                                         Text(
-                                            text = "Search or type URL",
+                                            text = if (isAutomationMode) "Enter URL or Twitter flow" else "Search ($selectedSearchEngine) or type URL",
                                             fontSize = 13.5.sp,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
                                             maxLines = 1
@@ -1161,6 +1304,69 @@ fun BrowserScreen(
                                 activeWebView?.settings?.userAgentString = if (isDesktopMode) desktopUserAgent else mobileUserAgent
                                 activeWebView?.reload()
                                 showMenu = false
+                            }
+                        )
+                        HorizontalDivider()
+                        DropdownMenuItem(
+                            text = { Text("Search Engine ($selectedSearchEngine)") },
+                            leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, tint = PrimaryBlue) },
+                            onClick = {
+                                showMenu = false
+                                showSearchEngineDialog = true
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text("Reader Mode")
+                                    Checkbox(
+                                        checked = isReaderModeActive,
+                                        onCheckedChange = {
+                                            showMenu = false
+                                            toggleReaderMode()
+                                        }
+                                    )
+                                }
+                            },
+                            leadingIcon = { Icon(Icons.Default.Article, contentDescription = null, tint = PrimaryBlue) },
+                            onClick = {
+                                showMenu = false
+                                toggleReaderMode()
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text("Dark Reader")
+                                    Checkbox(
+                                        checked = isForceDarkMode,
+                                        onCheckedChange = {
+                                            showMenu = false
+                                            toggleForceDarkMode()
+                                        }
+                                    )
+                                }
+                            },
+                            leadingIcon = { Icon(Icons.Default.DarkMode, contentDescription = null, tint = PrimaryBlue) },
+                            onClick = {
+                                showMenu = false
+                                toggleForceDarkMode()
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Clear Cookies & Storage") },
+                            leadingIcon = { Icon(Icons.Default.DeleteOutline, contentDescription = null, tint = ErrorRed) },
+                            onClick = {
+                                showMenu = false
+                                clearSiteData()
                             }
                         )
                         HorizontalDivider()
@@ -1516,7 +1722,7 @@ fun BrowserScreen(
             if (isTwitterSignup && !isFindInPageVisible && customVideoView == null) {
                 Surface(
                     shape = RoundedCornerShape(24.dp),
-                    color = PrimaryBlue,
+                    color = if (phoneNumber.isNotBlank()) PrimaryBlue else Color(0xFFD97706),
                     shadowElevation = 6.dp,
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
@@ -1525,16 +1731,26 @@ fun BrowserScreen(
                     Row(
                         modifier = Modifier
                             .clickable {
-                                runAutoPilotOnActiveTab()
-                                Toast.makeText(context, "Executing AutoFill on registration form...", Toast.LENGTH_SHORT).show()
+                                if (phoneNumber.isBlank()) {
+                                    phoneInputText = ""
+                                    showPhoneEditDialog = true
+                                } else {
+                                    runAutoPilotOnActiveTab()
+                                    Toast.makeText(context, "Executing AutoFill on registration form...", Toast.LENGTH_SHORT).show()
+                                }
                             }
                             .padding(horizontal = 14.dp, vertical = 8.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(Icons.Default.Bolt, contentDescription = "AutoFill", tint = SurfaceWhite, modifier = Modifier.size(16.dp))
+                        Icon(
+                            imageVector = if (phoneNumber.isNotBlank()) Icons.Default.Bolt else Icons.Default.PhoneAndroid,
+                            contentDescription = "AutoFill",
+                            tint = SurfaceWhite,
+                            modifier = Modifier.size(16.dp)
+                        )
                         Spacer(modifier = Modifier.width(6.dp))
                         Text(
-                            text = "AutoFill Form",
+                            text = if (phoneNumber.isNotBlank()) "AutoFill Form" else "Set TG Bot Phone",
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Bold,
                             color = SurfaceWhite
@@ -1545,7 +1761,7 @@ fun BrowserScreen(
                             color = Color.White.copy(alpha = 0.25f)
                         ) {
                             Text(
-                                text = if (phoneNumber.isNotBlank()) phoneNumber else "+2348091267977",
+                                text = if (phoneNumber.isNotBlank()) phoneNumber else "Required",
                                 fontSize = 10.sp,
                                 fontWeight = FontWeight.SemiBold,
                                 color = SurfaceWhite,
@@ -1699,11 +1915,17 @@ fun BrowserScreen(
     if (showPhoneEditDialog) {
         AlertDialog(
             onDismissRequest = { showPhoneEditDialog = false },
-            title = { Text("Active Cloud Phone Number") },
+            title = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.PhoneAndroid, contentDescription = null, tint = PrimaryBlue)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Telegram Bot Phone Number")
+                }
+            },
             text = {
                 Column {
                     Text(
-                        "Set the active phone number for automated signup:",
+                        "Paste or enter the genuine phone number received from @EHR_QUICKINCOME_BOT:",
                         fontSize = 12.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -1711,12 +1933,28 @@ fun BrowserScreen(
                     OutlinedTextField(
                         value = phoneInputText,
                         onValueChange = { phoneInputText = it },
-                        label = { Text("Phone Number") },
-                        placeholder = { Text("+2348091267977") },
+                        label = { Text("Bot Phone Number") },
+                        placeholder = { Text("+1234567890") },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth(),
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone)
                     )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    TextButton(
+                        onClick = {
+                            val clipMgr = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
+                            val clip = clipMgr?.primaryClip?.getItemAt(0)?.text?.toString()?.trim()
+                            if (!clip.isNullOrBlank()) {
+                                phoneInputText = clip
+                            } else {
+                                Toast.makeText(context, "Clipboard is empty", Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                    ) {
+                        Icon(Icons.Default.ContentPaste, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Paste from Clipboard", fontSize = 12.sp)
+                    }
                 }
             },
             confirmButton = {
@@ -1737,6 +1975,53 @@ fun BrowserScreen(
             dismissButton = {
                 OutlinedButton(onClick = { showPhoneEditDialog = false }) {
                     Text("Cancel")
+                }
+            }
+        )
+    }
+
+    // Search Engine Selection Dialog
+    if (showSearchEngineDialog) {
+        AlertDialog(
+            onDismissRequest = { showSearchEngineDialog = false },
+            title = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.Search, contentDescription = null, tint = PrimaryBlue)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Default Search Engine")
+                }
+            },
+            text = {
+                Column {
+                    searchEngines.keys.forEach { engineName ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    selectedSearchEngine = engineName
+                                    showSearchEngineDialog = false
+                                    Toast.makeText(context, "Default Search Engine: $engineName", Toast.LENGTH_SHORT).show()
+                                }
+                                .padding(vertical = 8.dp, horizontal = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            RadioButton(
+                                selected = selectedSearchEngine == engineName,
+                                onClick = {
+                                    selectedSearchEngine = engineName
+                                    showSearchEngineDialog = false
+                                    Toast.makeText(context, "Default Search Engine: $engineName", Toast.LENGTH_SHORT).show()
+                                }
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(engineName, fontSize = 14.sp, fontWeight = if (selectedSearchEngine == engineName) FontWeight.Bold else FontWeight.Normal)
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showSearchEngineDialog = false }) {
+                    Text("Close")
                 }
             }
         )
@@ -1938,39 +2223,43 @@ fun BrowserScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .background(Color.Black)
-                .pointerInput(Unit) {
-                    var startSideIsLeft = true
-                    detectVerticalDragGestures(
-                        onDragStart = { offset ->
-                            startSideIsLeft = offset.x < size.width / 2
-                        },
-                        onVerticalDrag = { change, dragAmount ->
-                            change.consume()
-                            val deltaFraction = -dragAmount / size.height.toFloat()
-                            if (startSideIsLeft) {
-                                adjustBrightness(deltaFraction * 1.5f)
-                            } else {
-                                adjustVolume(deltaFraction * 1.5f)
+                .pointerInput(isScreenLocked) {
+                    if (!isScreenLocked) {
+                        var startSideIsLeft = true
+                        detectVerticalDragGestures(
+                            onDragStart = { offset ->
+                                startSideIsLeft = offset.x < size.width / 2
+                            },
+                            onVerticalDrag = { change, dragAmount ->
+                                change.consume()
+                                val deltaFraction = -dragAmount / size.height.toFloat()
+                                if (startSideIsLeft) {
+                                    adjustBrightness(deltaFraction * 1.5f)
+                                } else {
+                                    adjustVolume(deltaFraction * 1.5f)
+                                }
                             }
-                        }
-                    )
+                        )
+                    }
                 }
-                .pointerInput(Unit) {
-                    detectTapGestures(
-                        onDoubleTap = { offset ->
-                            if (offset.x < size.width * 0.35f) {
-                                seekActiveVideo(-10)
-                            } else if (offset.x > size.width * 0.65f) {
-                                seekActiveVideo(10)
-                            } else {
-                                activeWebView?.evaluateJavascript(
-                                    "var v = document.querySelector('video'); if (v) { if (v.paused) v.play(); else v.pause(); }",
-                                    null
-                                )
-                                showGestureFeedback(Icons.Default.PlayArrow, "Play / Pause")
+                .pointerInput(isScreenLocked) {
+                    if (!isScreenLocked) {
+                        detectTapGestures(
+                            onDoubleTap = { offset ->
+                                if (offset.x < size.width * 0.35f) {
+                                    seekActiveVideo(-10)
+                                } else if (offset.x > size.width * 0.65f) {
+                                    seekActiveVideo(10)
+                                } else {
+                                    activeWebView?.evaluateJavascript(
+                                        "var v = document.querySelector('video'); if (v) { if (v.paused) v.play(); else v.pause(); }",
+                                        null
+                                    )
+                                    showGestureFeedback(Icons.Default.PlayArrow, "Play / Pause")
+                                }
                             }
-                        }
-                    )
+                        )
+                    }
                 }
         ) {
             AndroidView(
@@ -1978,56 +2267,125 @@ fun BrowserScreen(
                 modifier = Modifier.fillMaxSize()
             )
 
-            // Top Bar Controls Overlay for Fullscreen Video
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(16.dp)
-                    .align(Alignment.TopCenter),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                // Exit Fullscreen Button
+            // Screen Locked Floating Unlock Button
+            if (isScreenLocked) {
                 IconButton(
                     onClick = {
-                        customViewCallback?.onCustomViewHidden()
-                        customVideoView = null
-                        customViewCallback = null
+                        isScreenLocked = false
+                        showGestureFeedback(Icons.Default.LockOpen, "Screen Unlocked")
                     },
                     modifier = Modifier
-                        .size(40.dp)
-                        .background(Color.Black.copy(alpha = 0.5f), CircleShape)
+                        .padding(16.dp)
+                        .align(Alignment.TopStart)
+                        .size(44.dp)
+                        .background(Color.Black.copy(alpha = 0.7f), CircleShape)
                 ) {
-                    Icon(Icons.Default.ArrowBack, contentDescription = "Exit Fullscreen", tint = Color.White)
+                    Icon(Icons.Default.Lock, contentDescription = "Unlock Screen", tint = Color(0xFFF59E0B))
                 }
-
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    // Speed Toggle
-                    FilledTonalButton(
-                        onClick = {
-                            val nextSpeed = when (playbackSpeed) {
-                                1.0f -> 1.25f
-                                1.25f -> 1.5f
-                                1.5f -> 2.0f
-                                2.0f -> 0.5f
-                                else -> 1.0f
-                            }
-                            setVideoSpeed(nextSpeed)
-                        },
-                        colors = ButtonDefaults.filledTonalButtonColors(containerColor = Color.Black.copy(alpha = 0.6f)),
-                        shape = RoundedCornerShape(8.dp)
-                    ) {
-                        Text("${playbackSpeed}x", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                    }
-
-                    // PiP Button
+            } else {
+                // Top Bar Controls Overlay for Fullscreen Video (MX Player style)
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp, vertical = 12.dp)
+                        .align(Alignment.TopCenter),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    // Exit Fullscreen Button
                     IconButton(
-                        onClick = { triggerVideoPip() },
+                        onClick = {
+                            customViewCallback?.onCustomViewHidden()
+                            customVideoView = null
+                            customViewCallback = null
+                        },
                         modifier = Modifier
-                            .size(40.dp)
+                            .size(38.dp)
                             .background(Color.Black.copy(alpha = 0.5f), CircleShape)
                     ) {
-                        Icon(Icons.Default.PictureInPicture, contentDescription = "PiP", tint = Color.White)
+                        Icon(Icons.Default.ArrowBack, contentDescription = "Exit Fullscreen", tint = Color.White)
+                    }
+
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        // Aspect Ratio Cycle
+                        IconButton(
+                            onClick = { cycleAspectRatio() },
+                            modifier = Modifier
+                                .size(38.dp)
+                                .background(Color.Black.copy(alpha = 0.5f), CircleShape)
+                        ) {
+                            Icon(Icons.Default.AspectRatio, contentDescription = "Aspect Ratio", tint = Color.White)
+                        }
+
+                        // 200% Audio Volume Boost
+                        IconButton(
+                            onClick = { toggleAudioBoost() },
+                            modifier = Modifier
+                                .size(38.dp)
+                                .background(Color.Black.copy(alpha = 0.5f), CircleShape)
+                        ) {
+                            Icon(
+                                Icons.Default.VolumeUp,
+                                contentDescription = "Audio Boost",
+                                tint = if (isAudioBoosted) SuccessGreen else Color.White
+                            )
+                        }
+
+                        // Download Video Stream
+                        IconButton(
+                            onClick = { detectAndDownloadVideo() },
+                            modifier = Modifier
+                                .size(38.dp)
+                                .background(Color.Black.copy(alpha = 0.5f), CircleShape)
+                        ) {
+                            Icon(Icons.Default.Download, contentDescription = "Download Video", tint = Color.White)
+                        }
+
+                        // Speed Toggle
+                        FilledTonalButton(
+                            onClick = {
+                                val nextSpeed = when (playbackSpeed) {
+                                    1.0f -> 1.25f
+                                    1.25f -> 1.5f
+                                    1.5f -> 2.0f
+                                    2.0f -> 0.5f
+                                    else -> 1.0f
+                                }
+                                setVideoSpeed(nextSpeed)
+                            },
+                            colors = ButtonDefaults.filledTonalButtonColors(containerColor = Color.Black.copy(alpha = 0.6f)),
+                            shape = RoundedCornerShape(8.dp),
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                            modifier = Modifier.height(34.dp)
+                        ) {
+                            Text("${playbackSpeed}x", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        }
+
+                        // PiP Button
+                        IconButton(
+                            onClick = { triggerVideoPip() },
+                            modifier = Modifier
+                                .size(38.dp)
+                                .background(Color.Black.copy(alpha = 0.5f), CircleShape)
+                        ) {
+                            Icon(Icons.Default.PictureInPicture, contentDescription = "PiP", tint = Color.White)
+                        }
+
+                        // Screen Lock Button
+                        IconButton(
+                            onClick = {
+                                isScreenLocked = true
+                                showGestureFeedback(Icons.Default.Lock, "Screen Locked")
+                            },
+                            modifier = Modifier
+                                .size(38.dp)
+                                .background(Color.Black.copy(alpha = 0.5f), CircleShape)
+                        ) {
+                            Icon(Icons.Default.LockOpen, contentDescription = "Lock Screen", tint = Color.White)
+                        }
                     }
                 }
             }

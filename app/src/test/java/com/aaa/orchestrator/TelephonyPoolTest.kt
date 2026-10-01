@@ -15,15 +15,23 @@ class TelephonyPoolTest {
     }
 
     @Test
-    fun testInitialPoolHasThreeSlots() {
-        val slots = repo.slots.value
-        assertEquals(3, slots.size)
-        assertEquals("+2348091267977", slots[0].phoneNumber)
-        assertEquals(0, slots[0].accountsCreated)
+    fun testInitialPoolStartsEmptyAndAcceptsRealBotNumber() {
+        assertNull(repo.getActiveSlot())
+        assertEquals("Awaiting Telegram Bot Number", repo.getSlotSummary())
+
+        repo.setSlotPhoneNumber(1, "+2348091267977")
+        val active = repo.getActiveSlot()
+        assertNotNull(active)
+        assertEquals("+2348091267977", active!!.phoneNumber)
+        assertEquals(0, active.accountsCreated)
+        assertTrue(repo.getSlotSummary().contains("+2348091267977"))
     }
 
     @Test
     fun testSlotUsageIncrementAndExhaustionAtSix() {
+        repo.setSlotPhoneNumber(1, "+2348091267977")
+        repo.setSlotPhoneNumber(2, "+2348091267978")
+
         val active = repo.getActiveSlot()
         assertNotNull(active)
         assertEquals(1, active!!.slotIndex)
@@ -46,7 +54,10 @@ class TelephonyPoolTest {
 
     @Test
     fun testGmailSessionQuotaReachedAtFiveNumbers() {
-        // Initial setup has 3 numbers
+        repo.setSlotPhoneNumber(1, "+2348091267977")
+        repo.setSlotPhoneNumber(2, "+2348091267978")
+        repo.setSlotPhoneNumber(3, "+2348091267979")
+
         val reached1 = repo.replaceExhaustedSlot(1, "+2348091267980") // Total: 4
         assertFalse(reached1)
 

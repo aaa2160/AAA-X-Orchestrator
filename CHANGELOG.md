@@ -2,6 +2,40 @@
 
 All notable changes and architectural configurations for this project are documented here.
 
+## [2.5.0] - 2026-10-01
+
+### Fixed & Architectural Transparency
+- **Total Eradication of Synthetic & Dummy Phone Numbers ([`TelephonyPoolRepository.kt`](file:///root/project/AAAX/app/src/main/java/com/aaa/orchestrator/data/repository/TelephonyPoolRepository.kt), [`OrchestratorEngine.kt`](file:///root/project/AAAX/app/src/main/java/com/aaa/orchestrator/engine/OrchestratorEngine.kt), [`FloatingAssistantService.kt`](file:///root/project/AAAX/app/src/main/java/com/aaa/orchestrator/service/FloatingAssistantService.kt), [`BrowserScreen.kt`](file:///root/project/AAAX/app/src/main/java/com/aaa/orchestrator/ui/screens/BrowserScreen.kt))**:
+  - Removed all pseudo-random phone number synthesis (`8091267970L + random`) and fallback dummy numbers (`+2348091267977`).
+  - `TelephonyPoolRepository` starts strictly empty with zero dummy numbers; `getActiveSlot()` returns `null` and slot summary reports `"Awaiting Telegram Bot Number"` until authentic bot input is registered.
+  - `OrchestratorEngine.startAutomation()` checks for valid bot number; if blank, gracefully pauses into `OrchestratorState.PausedThrottled` directing user to acquire a genuine number from `@EHR_QUICKINCOME_BOT`.
+  - In `BrowserScreen.kt`, auto-pilot form injections abort and prompt if phone is missing rather than populating dummy numbers.
+  - Floating auto-fill registration pill displays an amber warning `"Set TG Bot Phone [Required]"` when unconfigured, opening the phone input modal on tap.
+
+### Added & Open-Source Media Player Enhancements
+- **Open-Source VLC & MX Player Media Engine ([`BrowserScreen.kt`](file:///root/project/AAAX/app/src/main/java/com/aaa/orchestrator/ui/screens/BrowserScreen.kt))**:
+  - **Aspect Ratio Cycler**: 1-tap dynamic switcher between Fit, Fill/Crop, 16:9, 4:3, and Stretch Full using CSS `object-fit`.
+  - **200% Audio Volume Boost**: Web Audio API `AudioContext` and `createGain(2.0)` providing hardware-boosted sound for quiet web media.
+  - **Touch Guard Screen Lock Mode**: Prevents accidental touches, brightness/volume drag changes, and seeks while watching video; features an intuitive floating Amber lock button for 1-tap unlock.
+  - **Video Sniffer & Downloader**: 1-tap detection and download manager integration for HTML5 video streams.
+  - **Double-Tap Seek & Visual HUD**: Smooth +/- 10s seeking with centered gesture feedback HUD.
+
+### Added & Professional Normal Browser Suite
+- **Multi-Engine Search Selector ([`BrowserScreen.kt`](file:///root/project/AAAX/app/src/main/java/com/aaa/orchestrator/ui/screens/BrowserScreen.kt))**:
+  - Integrated search engine selector supporting Google, DuckDuckGo, Brave Search, Bing, and Ecosia.
+  - Dynamic Omnibox `onGo` query dispatching to the user's selected default search engine.
+- **Distraction-Free Reader Mode ([`BrowserScreen.kt`](file:///root/project/AAAX/app/src/main/java/com/aaa/orchestrator/ui/screens/BrowserScreen.kt))**:
+  - 1-tap DOM clean extraction isolating article headings, paragraphs, and images into a clean readable view.
+- **Forced Dark Reader Mode ([`BrowserScreen.kt`](file:///root/project/AAAX/app/src/main/java/com/aaa/orchestrator/ui/screens/BrowserScreen.kt))**:
+  - High-contrast inverted dark mode for comfortable reading and battery saving on Samsung Galaxy A30 OLED displays.
+- **Privacy & Storage Management ([`BrowserScreen.kt`](file:///root/project/AAAX/app/src/main/java/com/aaa/orchestrator/ui/screens/BrowserScreen.kt))**:
+  - 1-tap clearing of site cookies, HTML5 web storage, form data, and HTTP cache.
+
+### Added & Dashboard Telephony Enhancements
+- **Quick Telegram Bot Telephony Input ([`DashboardScreen.kt`](file:///root/project/AAAX/app/src/main/java/com/aaa/orchestrator/ui/screens/DashboardScreen.kt), [`MainActivity.kt`](file:///root/project/AAAX/app/src/main/java/com/aaa/orchestrator/MainActivity.kt))**:
+  - Added direct 1-tap "Paste" button to the Cloud Telephony card on Dashboard.
+  - Integrated modal dialog with instant "Paste from Clipboard" shortcut allowing users to immediately register their numbers copied from `@EHR_QUICKINCOME_BOT`.
+
 ## [2.4.0] - 2026-10-01
 
 ### Fixed & Architectural Improvements

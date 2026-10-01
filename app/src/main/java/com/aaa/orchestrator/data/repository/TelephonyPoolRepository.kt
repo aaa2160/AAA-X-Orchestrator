@@ -7,11 +7,11 @@ import kotlinx.coroutines.flow.asStateFlow
 import timber.log.Timber
 
 /**
- * Manages Telegram Bot (@EHR_QUICKINCOME_BOT) telephony number pool and quota cycles.
- * Directly integrates with:
- * - Dynamic Telegram bot phone numbers (+234, +1, +44, etc.)
- * - Automatic rotation when account capacity is reached
- * - Inbound OTP routing via Telegram notification listener
+ * Manages real Telegram Bot (@EHR_QUICKINCOME_BOT) telephony numbers.
+ * Strictly avoids synthetic or fake numbers:
+ * - Only holds real numbers received from the Telegram Bot or user input.
+ * - Tracks account usage (up to 6 accounts per real bot number).
+ * - Explicitly indicates when a fresh number must be requested from the Telegram Bot.
  */
 class TelephonyPoolRepository {
 
@@ -21,53 +21,52 @@ class TelephonyPoolRepository {
     private var activeSlotIndex: Int = 1
     private var totalNumbersInCurrentSession: Int = 0
 
-    init {
-        initializeInitialSlots()
-    }
-
-    private fun initializeInitialSlots() {
-        val initial = listOf(
-            TelephonySlot(1, "+2348091267977", 0, isReserved = true),
-            TelephonySlot(2, "+2348091267978", 0, isReserved = true),
-            TelephonySlot(3, "+2348091267979", 0, isReserved = true)
-        )
-        _slots.value = initial
-        totalNumbersInCurrentSession = 3
-    }
-
     /**
      * Retrieves the currently active number slot that has capacity (< 6 accounts).
-     * If all slots are exhausted, automatically triggers a pool renewal loop.
+     * Returns null if no real Telegram Bot number has been provided yet.
      */
-    fun getActiveSlot(): TelephonySlot {
+    fun getActiveSlot(): TelephonySlot? {
         val currentList = _slots.value
-        // First check current slot
+        if (currentList.isEmpty()) return null
+
         val current = currentList.find { it.slotIndex == activeSlotIndex && !it.isExhausted }
         if (current != null) return current
 
-        // Otherwise find first slot with available quota
         val nextAvailable = currentList.find { !it.isExhausted }
         if (nextAvailable != null) {
             activeSlotIndex = nextAvailable.slotIndex
             return nextAvailable
         }
 
-        // All slots exhausted: automatically trigger pool renewal
-        renewAllSlots()
-        return _slots.value.first()
+        return null
     }
 
-    private fun renewAllSlots() {
-        val baseNumber = 8091267970L + (10..999).random()
-        val renewed = listOf(
-            TelephonySlot(1, "+234$baseNumber", 0, isReserved = true),
-            TelephonySlot(2, "+234${baseNumber + 1}", 0, isReserved = true),
-            TelephonySlot(3, "+234${baseNumber + 2}", 0, isReserved = true)
-        )
-        _slots.value = renewed
-        activeSlotIndex = 1
-        resetGmailSession()
-        Timber.i("Telegram Bot telephony slots renewed.")
+    /**
+     * Registers a genuine phone number provided by @EHR_QUICKINCOME_BOT.
+     */
+    fun setSlotPhoneNumber(slotIndex: Int = 1, newPhoneNumber: String) {
+        if (newPhoneNumber.isBlank()) return
+        val currentList = _slots.value.toMutableList()
+        val index = currentList.indexOfFirst { it.slotIndex == slotIndex }
+        if (index != -1) {
+            currentList[index] = currentList[index].copy(
+                phoneNumber = newPhoneNumber,
+                accountsCreated = 0,
+                isReserved = true
+            )
+        } else {
+            currentList.add(
+                TelephonySlot(
+                    slotIndex = slotIndex,
+                    phoneNumber = newPhoneNumber,
+                    accountsCreated = 0,
+                    isReserved = true
+                )
+            )
+        }
+        _slots.value = currentList
+        activeSlotIndex = slotIndex
+        Timber.i("Real Telegram Bot phone registered: $newPhoneNumber in slot #$slotIndex")
     }
 
     /**
@@ -81,59 +80,47 @@ class TelephonyPoolRepository {
             val updated = slot.copy(accountsCreated = slot.accountsCreated + 1)
             currentList[index] = updated
             _slots.value = currentList
-            Timber.i("Telephony Slot #${slot.slotIndex} (${slot.phoneNumber}) usage incremented: ${updated.accountsCreated}/6")
+            Timber.i("Telegram Bot Number (${slot.phoneNumber}) usage: ${updated.accountsCreated}/6")
             return updated.isExhausted
         }
         return false
     }
 
     /**
-     * Replaces an exhausted slot with a freshly reserved number from Telegram Bot.
-     * Checks if the session cap has been reached for the current session.
+     * Replaces an exhausted slot with a new number from Telegram Bot.
      */
     fun replaceExhaustedSlot(slotIndex: Int, newPhoneNumber: String): Boolean {
+        if (newPhoneNumber.isBlank()) return false
         val currentList = _slots.value.toMutableList()
         val index = currentList.indexOfFirst { it.slotIndex == slotIndex }
+        totalNumbersInCurrentSession++
+        val newSlot = TelephonySlot(
+            slotIndex = slotIndex,
+            phoneNumber = newPhoneNumber,
+            accountsCreated = 0,
+            isReserved = true
+        )
         if (index != -1) {
-            totalNumbersInCurrentSession++
-            currentList[index] = TelephonySlot(
-                slotIndex = slotIndex,
-                phoneNumber = newPhoneNumber,
-                accountsCreated = 0,
-                isReserved = true
-            )
-            _slots.value = currentList
-            Timber.i("Slot #$slotIndex renewed with Telegram Bot number $newPhoneNumber. Session total: $totalNumbersInCurrentSession/5")
-
-            // Returns true if the session limit of 5 is reached
-            return totalNumbersInCurrentSession >= TelephonySlot.MAX_NUMBERS_PER_GMAIL_SESSION
+            currentList[index] = newSlot
+        } else {
+            currentList.add(newSlot)
         }
-        return false
+        _slots.value = currentList
+        activeSlotIndex = slotIndex
+        Timber.i("Active Telegram Bot number rotated to: $newPhoneNumber (Session total: $totalNumbersInCurrentSession)")
+        return totalNumbersInCurrentSession >= TelephonySlot.MAX_NUMBERS_PER_GMAIL_SESSION
     }
 
-    /**
-     * Resets the session counter after account deletion & re-registration.
-     */
     fun resetGmailSession() {
         totalNumbersInCurrentSession = 0
-        Timber.i("Telephony session reset. Quota cycle renewed.")
     }
 
     fun getSlotSummary(): String {
-        val active = getActiveSlot() ?: return "No active bot number"
-        return "TG Bot: ${active.phoneNumber} (${active.accountsCreated}/${TelephonySlot.MAX_ACCOUNTS_PER_NUMBER} used)"
-    }
-
-    /**
-     * Updates a specific slot's phone number with a real user-specified number.
-     */
-    fun setSlotPhoneNumber(slotIndex: Int, newPhoneNumber: String) {
-        val currentList = _slots.value.toMutableList()
-        val index = currentList.indexOfFirst { it.slotIndex == slotIndex }
-        if (index != -1) {
-            currentList[index] = currentList[index].copy(phoneNumber = newPhoneNumber)
-            _slots.value = currentList
-            Timber.i("Telephony Slot #$slotIndex phone number updated to $newPhoneNumber")
+        val active = getActiveSlot()
+        return if (active == null || active.phoneNumber.isBlank()) {
+            "Awaiting Telegram Bot Number"
+        } else {
+            "TG Bot: ${active.phoneNumber} (${active.accountsCreated}/${TelephonySlot.MAX_ACCOUNTS_PER_NUMBER} used)"
         }
     }
 }
