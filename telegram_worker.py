@@ -4,26 +4,29 @@ AAA-X Standalone Python Telegram Worker
 Automates fetching rented phone numbers and intercepting SMS OTPs
 from @EHR_QUICKINCOME_BOT via Telethon MTProto client.
 
-Features:
-- Sends /start or clicks "+ GET NUMBER" to @EHR_QUICKINCOME_BOT
-- Extracts phone numbers from the bot's inline keyboard (e.g., "+2348091267977")
-- Listens for incoming OTP verification codes (6-digit) from Twitter / X
-- Automatically syncs detected phone & OTP to the AAA-X Cloud Orchestrator on Render
+Fully autonomous:
+- Sends /start or clicks "GET NUMBER"
+- Selects "TWITTER" automatically
+- Selects "NIGERIA" automatically
+- Captures generated phone number (e.g., +2348170905785)
+- Syncs phone to Render cloud worker
+- Listens for incoming 6-digit Twitter OTP verification codes
+- Syncs OTP to Render cloud worker
 """
 
 import os
 import re
 import sys
 import time
+import json
 import asyncio
-import requests
+import urllib.request
 from telethon import TelegramClient, events
-from telethon.tl.custom import Button
 
 # Configuration
-API_ID = int(os.environ.get("TELEGRAM_API_ID", "2040"))  # Default or custom Telegram API ID
+API_ID = int(os.environ.get("TELEGRAM_API_ID", "2040"))
 API_HASH = os.environ.get("TELEGRAM_API_HASH", "b18441a1ff607e10a989891a5462e627")
-SESSION_NAME = os.environ.get("TELEGRAM_SESSION", "aaa_telegram_session")
+SESSION_NAME = os.environ.get("TELEGRAM_SESSION", "session_auth")
 TARGET_BOT = os.environ.get("TARGET_BOT", "EHR_QUICKINCOME_BOT")
 CLOUD_ENDPOINT = os.environ.get("CLOUD_ENDPOINT", "https://aaa-x-cloud-worker.onrender.com")
 
@@ -33,17 +36,24 @@ def sync_to_cloud(endpoint_path: str, data: dict):
     """Syncs phone numbers and OTPs to the active Render cloud worker."""
     url = f"{CLOUD_ENDPOINT.rstrip('/')}/{endpoint_path.lstrip('/')}"
     try:
-        resp = requests.post(url, json=data, timeout=8)
-        print(f"[*] Cloud Sync ({endpoint_path}): {resp.status_code} - {resp.json()}")
+        req = urllib.request.Request(
+            url,
+            data=json.dumps(data).encode("utf-8"),
+            headers={"Content-Type": "application/json"}
+        )
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            body = resp.read().decode("utf-8")
+            print(f"[*] Cloud Sync ({endpoint_path}): {resp.status} - {body}")
     except Exception as e:
         print(f"[!] Cloud Sync Warning ({endpoint_path}): {e}")
 
 @client.on(events.NewMessage(chats=TARGET_BOT))
+@client.on(events.MessageEdited(chats=TARGET_BOT))
 async def handle_bot_message(event):
     message_text = event.message.message or ""
     print(f"\n[+] Incoming from @{TARGET_BOT}:\n{message_text}")
 
-    # 1. Search for phone number in inline buttons or text
+    # Check for phone number in buttons first (e.g. ['+2348170905785'])
     phone_found = None
     if event.message.buttons:
         for row in event.message.buttons:
@@ -55,6 +65,40 @@ async def handle_bot_message(event):
                     print(f"[🎯] Phone Number Detected in Button: {phone_found}")
                     sync_to_cloud("/api/phone", {"phoneNumber": phone_found})
 
+    # Step 0: Check for Main Menu 'GET NUMBER'
+    if "SELECT AN OPTION" in message_text.upper() or "WELCOME" in message_text.upper():
+        if event.message.buttons:
+            for row in event.message.buttons:
+                for btn in row:
+                    if "GET NUMBER" in btn.text.upper() or "𝗚𝗘𝗧 𝗡𝗨𝗠𝗕𝗘𝗥" in btn.text:
+                        print(f"[*] Auto-clicking Main Menu: {btn.text}")
+                        await asyncio.sleep(1)
+                        await btn.click()
+                        return
+
+    # Step 1: Check for Service Selection ('TWITTER')
+    if "SELECT SERVICE" in message_text.upper() or "CHOOSE WHAT YOU NEED" in message_text.upper():
+        if event.message.buttons:
+            for row in event.message.buttons:
+                for btn in row:
+                    if "TWITTER" in btn.text.upper():
+                        print(f"[*] Auto-clicking Service: {btn.text}")
+                        await asyncio.sleep(1)
+                        await btn.click()
+                        return
+
+    # Step 2: Check for Region Selection ('NIGERIA')
+    if "SELECT REGION" in message_text.upper() or "AVAILABLE COUNTRIES" in message_text.upper():
+        if event.message.buttons:
+            for row in event.message.buttons:
+                for btn in row:
+                    if "NIGERIA" in btn.text.upper():
+                        print(f"[*] Auto-clicking Region: {btn.text}")
+                        await asyncio.sleep(1)
+                        await btn.click()
+                        return
+
+    # Step 3: Check for text phone number fallback
     if not phone_found:
         match = re.search(r"\+([0-9]{9,15})", message_text)
         if match:
@@ -62,7 +106,7 @@ async def handle_bot_message(event):
             print(f"[🎯] Phone Number Detected in Text: {phone_found}")
             sync_to_cloud("/api/phone", {"phoneNumber": phone_found})
 
-    # 2. Search for 6-digit OTP verification code
+    # Step 4: Check for 6-digit OTP verification code
     otp_match = re.search(r"\b\d{6}\b", message_text)
     if otp_match:
         otp_code = otp_match.group(0)
@@ -71,43 +115,40 @@ async def handle_bot_message(event):
 
 async def request_new_number():
     """Commands the bot to generate a new number."""
-    print(f"[*] Sending request to @{TARGET_BOT}...")
+    print(f"[*] Triggering number request flow with @{TARGET_BOT}...")
     try:
         bot = await client.get_entity(TARGET_BOT)
-        # Send /start first to wake bot or get menu
-        await client.send_message(bot, "/start")
-        await asyncio.sleep(2)
-
-        # Check last message for "+ GET NUMBER" button
-        messages = await client.get_messages(bot, limit=3)
+        # Check recent messages for "+ GET NUMBER" or "𝗚𝗘𝗧 𝗡𝗨𝗠𝗕𝗘𝗥" button
+        messages = await client.get_messages(bot, limit=4)
         for msg in messages:
             if msg.buttons:
                 for row in msg.buttons:
                     for btn in row:
-                        if "GET NUMBER" in btn.text.upper():
-                            print(f"[*] Clicking button: {btn.text}")
+                        if "GET NUMBER" in btn.text.upper() or "𝗚𝗘𝗧 𝗡𝗨𝗠𝗕𝗘𝗥" in btn.text:
+                            print(f"[*] Clicking menu button: {btn.text}")
                             await btn.click()
                             return
-        # If no button found, send text "+ GET NUMBER"
-        await client.send_message(bot, "+ GET NUMBER")
+        # If no button found, send /start to trigger menu
+        print("[*] Sending /start to reset menu...")
+        await client.send_message(bot, "/start")
     except Exception as e:
         print(f"[!] Error requesting number: {e}")
 
 async def main():
-    print("=" * 60)
-    print("⚡ AAA-X Standalone Python Telegram Worker")
+    print("=" * 65)
+    print("⚡ AAA-X Autonomous Telegram Worker for @EHR_QUICKINCOME_BOT")
     print(f"[*] Target Bot: @{TARGET_BOT}")
     print(f"[*] Cloud Target: {CLOUD_ENDPOINT}")
-    print("=" * 60)
+    print("=" * 65)
 
     await client.start()
     me = await client.get_me()
     print(f"[✓] Logged in as: {me.first_name} (@{me.username or 'No Username'}, Phone: +{me.phone})")
 
-    # Trigger initial number request
+    # Start the automated number request flow
     await request_new_number()
 
-    print("[*] Worker is running and actively listening for numbers & OTPs...")
+    print("\n[*] Worker is listening in background for numbers & OTPs...")
     await client.run_until_disconnected()
 
 if __name__ == "__main__":

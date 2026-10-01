@@ -7,3 +7,6 @@ build/
 *.jks
 service-account.json
 *.apk
+*.session
+*.session-journal
+login_state.json
