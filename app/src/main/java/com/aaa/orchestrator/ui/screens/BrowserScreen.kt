@@ -19,8 +19,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
+import com.aaa.orchestrator.data.model.OrchestratorState
 import com.aaa.orchestrator.engine.OrchestratorEngine
 import com.aaa.orchestrator.ui.theme.*
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 import timber.log.Timber
 import java.io.ByteArrayInputStream
@@ -41,16 +43,10 @@ fun BrowserScreen(
     var canGoBack by remember { mutableStateOf(false) }
     var canGoForward by remember { mutableStateOf(false) }
 
-    val state = engine?.state?.collectAsState()?.value
-    val phoneNumber by (engine?.activePhoneNumber ?: remember { mutableStateOf("+48459074091") }).let {
-        if (engine != null) it.collectAsState() else remember { mutableStateOf("+48459074091") }
-    }
-    val password by (engine?.activePassword ?: remember { mutableStateOf("AAA_Auto_2026") }).let {
-        if (engine != null) it.collectAsState() else remember { mutableStateOf("AAA_Auto_2026") }
-    }
-    val latestOtp by (engine?.latestOtp ?: remember { mutableStateOf(null) }).let {
-        if (engine != null) it.collectAsState() else remember { mutableStateOf(null) }
-    }
+    val state by (engine?.state ?: remember { MutableStateFlow<OrchestratorState>(OrchestratorState.Idle) }).collectAsState()
+    val phoneNumber by (engine?.activePhoneNumber ?: remember { MutableStateFlow("+48459074091") }).collectAsState()
+    val password by (engine?.activePassword ?: remember { MutableStateFlow("AAA_Auto_2026") }).collectAsState()
+    val latestOtp by (engine?.latestOtp ?: remember { MutableStateFlow<String?>(null) }).collectAsState()
 
     val adBlockHosts = remember {
         setOf(
@@ -94,18 +90,18 @@ fun BrowserScreen(
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Surface(
                             shape = RoundedCornerShape(6.dp),
-                            color = if (state?.label?.contains("Idle") == false) SoftGreenTile else SurfaceVariantLight
+                            color = if (!state.label.contains("Idle")) SoftGreenTile else SurfaceVariantLight
                         ) {
                             Text(
-                                text = if (state?.label?.contains("Idle") == false) "WORKFLOW ACTIVE" else "BROWSER STANDBY",
+                                text = if (!state.label.contains("Idle")) "WORKFLOW ACTIVE" else "BROWSER STANDBY",
                                 style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                                color = if (state?.label?.contains("Idle") == false) SuccessGreen else TextMuted,
+                                color = if (!state.label.contains("Idle")) SuccessGreen else TextMuted,
                                 modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
                             )
                         }
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = state?.label ?: "Ready",
+                            text = state.label,
                             style = MaterialTheme.typography.labelSmall,
                             color = TextSlateDark,
                             maxLines = 1
@@ -172,8 +168,8 @@ fun BrowserScreen(
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
                             Column {
-                                Text("2nr Phone", fontSize = 10.sp, color = TextMuted)
-                                Text(phoneNumber, fontSize = 11.sp, fontWeight = FontWeight.Bold, color = TextSlateDark)
+                                Text(text = "2nr Phone", fontSize = 10.sp, color = TextMuted)
+                                Text(text = phoneNumber, fontSize = 11.sp, fontWeight = FontWeight.Bold, color = TextSlateDark)
                             }
                             Row {
                                 IconButton(
@@ -416,7 +412,7 @@ private fun injectValueIntoInput(webView: WebView?, value: String) {
                 return 'focused_filled';
             }
             var inputs = document.querySelectorAll('input');
-            for (var i = 0; i < inputs.size; i++) {
+            for (var i = 0; i < inputs.length; i++) {
                 if (!inputs[i].disabled && inputs[i].type !== 'hidden') {
                     inputs[i].value = '$value';
                     inputs[i].dispatchEvent(new Event('input', { bubbles: true }));
