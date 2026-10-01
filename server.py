@@ -80,6 +80,8 @@ phone_request_pending = False
 
 # Fully Cloud-Integrated Telegram Worker (No local background task needed)
 STRING_SESSION = os.environ.get("TELEGRAM_STRING_SESSION")
+if STRING_SESSION:
+    STRING_SESSION = STRING_SESSION.strip().strip("'").strip('"')
 API_ID = int(os.environ.get("TELEGRAM_API_ID", "2040"))
 API_HASH = os.environ.get("TELEGRAM_API_HASH", "b18441a1ff607e10a989891a5462e627")
 TARGET_BOT = os.environ.get("TARGET_BOT", "EHR_QUICKINCOME_BOT")
@@ -175,19 +177,23 @@ async def cloud_request_bot_number():
 
 @app.on_event("startup")
 async def start_cloud_worker():
+    print("[SERVER] AAA-X Cloud Orchestrator successfully started.")
     if tg_client:
         async def worker_loop():
+            await asyncio.sleep(2)
             while True:
                 try:
                     if not tg_client.is_connected():
                         await tg_client.connect()
                     if not await tg_client.is_user_authorized():
-                        await tg_client.start()
+                        print("[CLOUD TG] Client connected but not authorized. Waiting for credentials.")
+                        await asyncio.sleep(15)
+                        continue
                     print("[CLOUD TG] Connected and authenticated in Frankfurt.")
                     await cloud_request_bot_number()
                     await tg_client.run_until_disconnected()
                 except Exception as e:
-                    print(f"[CLOUD TG] Disconnected ({e}). Reconnecting in 5s...")
+                    print(f"[CLOUD TG] Notice ({e}). Retrying in 5s...")
                     await asyncio.sleep(5)
         asyncio.create_task(worker_loop())
 
