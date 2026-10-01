@@ -38,6 +38,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.aaa.orchestrator.data.model.OrchestratorState
+import com.aaa.orchestrator.engine.AdBlockEngine
 import com.aaa.orchestrator.engine.AppLauncher
 import com.aaa.orchestrator.engine.OrchestratorEngine
 import com.aaa.orchestrator.ui.theme.*
@@ -114,23 +115,7 @@ fun BrowserScreen(
     val mobileUserAgent = "Mozilla/5.0 (Linux; Android 11; SM-A305F) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Mobile Safari/537.36"
     val desktopUserAgent = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36"
 
-    val adBlockHosts = remember {
-        setOf(
-            "doubleclick.net",
-            "google-analytics.com",
-            "adservice.google.com",
-            "googlesyndication.com",
-            "adnxs.com",
-            "scorecardresearch.com",
-            "facebook.net/tr",
-            "taboola.com",
-            "outbrain.com",
-            "criteo.com",
-            "telemetry.x.com",
-            "ads-twitter.com",
-            "analytics.twitter.com"
-        )
-    }
+    val adBlockEngine = remember { AdBlockEngine(context) }
 
     fun navigateTo(rawQuery: String) {
         val trimmed = rawQuery.trim()
@@ -934,8 +919,43 @@ fun BrowserScreen(
                 }
             }
 
-            // Professional Toolbar Actions: Tab Counter, Find in Page, Share, Bookmarks/History, Desktop Mode
+            // Professional Toolbar Actions: AdBlock Shield, Tab Counter, Find in Page, Share, Bookmarks/History, Desktop Mode
             Row(verticalAlignment = Alignment.CenterVertically) {
+                // Titanium AdBlock Shield Badge
+                Surface(
+                    onClick = {
+                        Toast.makeText(
+                            context,
+                            "🛡️ Titanium Shield: $blockedAdsCount ads & $blockedTrackersCount trackers blocked",
+                            Toast.LENGTH_SHORT
+                        ).show()
+                    },
+                    shape = RoundedCornerShape(6.dp),
+                    color = if (blockedAdsCount + blockedTrackersCount > 0) SoftGreenTile else SurfaceVariantLight,
+                    modifier = Modifier.height(26.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Shield,
+                            contentDescription = "AdBlock Shield",
+                            tint = if (blockedAdsCount + blockedTrackersCount > 0) SuccessGreen else TextMuted,
+                            modifier = Modifier.size(13.dp)
+                        )
+                        Spacer(modifier = Modifier.width(3.dp))
+                        Text(
+                            text = "${blockedAdsCount + blockedTrackersCount}",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = if (blockedAdsCount + blockedTrackersCount > 0) SuccessGreen else TextMuted
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.width(4.dp))
+
                 // Tab Switcher Button
                 Surface(
                     onClick = { showTabSwitcher = true },
@@ -1144,27 +1164,20 @@ fun BrowserScreen(
                             }
                         }
 
-                        // WebViewClient with adblock and render crash protection
+                        // WebViewClient with Titanium AdBlock and render crash protection
                         webViewClient = object : WebViewClient() {
                             override fun shouldInterceptRequest(
                                 view: WebView?,
                                 request: WebResourceRequest?
                             ): WebResourceResponse? {
-                                val host = request?.url?.host ?: ""
-
-                                for (blockedHost in adBlockHosts) {
-                                    if (host.contains(blockedHost, ignoreCase = true)) {
-                                        if (blockedHost.contains("analytic") || blockedHost.contains("telemetry") || blockedHost.contains("scorecard")) {
-                                            blockedTrackersCount++
-                                        } else {
-                                            blockedAdsCount++
-                                        }
-                                        return WebResourceResponse(
-                                            "text/plain",
-                                            "UTF-8",
-                                            ByteArrayInputStream(ByteArray(0))
-                                        )
+                                if (adBlockEngine.shouldBlock(request)) {
+                                    val host = request?.url?.host ?: ""
+                                    if (host.contains("analytic") || host.contains("telemetry") || host.contains("scorecard") || host.contains("tracker") || host.contains("clarity")) {
+                                        blockedTrackersCount++
+                                    } else {
+                                        blockedAdsCount++
                                     }
+                                    return adBlockEngine.createEmptyResponse()
                                 }
                                 return super.shouldInterceptRequest(view, request)
                             }
@@ -1191,6 +1204,7 @@ fun BrowserScreen(
                                 }
                                 canGoBack = view?.canGoBack() == true
                                 canGoForward = view?.canGoForward() == true
+                                adBlockEngine.injectCosmeticAdHiding(view)
                             }
 
                             override fun onRenderProcessGone(

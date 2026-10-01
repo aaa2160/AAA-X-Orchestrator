@@ -67,6 +67,14 @@ class MainActivity : ComponentActivity() {
             }
         }
 
+        // Bind automatic 2nr phone number detection from active screen
+        OrchestratorAccessibilityService.onPhoneDetected = { phone ->
+            runOnUiThread {
+                engine.updateActivePhoneNumber(phone)
+                Toast.makeText(this, "Auto-detected 2nr Phone: $phone", Toast.LENGTH_SHORT).show()
+            }
+        }
+
         setContent {
             AAAXTheme {
                 val scope = rememberCoroutineScope()
@@ -156,5 +164,6 @@ class MainActivity : ComponentActivity() {
     override fun onDestroy() {
         super.onDestroy()
         OrchestratorAccessibilityService.onKillSwitchTriggered = null
+        OrchestratorAccessibilityService.onPhoneDetected = null
     }
 }

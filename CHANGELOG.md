@@ -2,6 +2,20 @@
 
 All notable changes and architectural configurations for this project are documented here.
 
+## [1.6.0] - 2026-10-01
+
+### Added & Enhanced
+- **Titanium AdBlock & Anti-Tracking Engine ([`AdBlockEngine.kt`](file:///root/project/AAAX/app/src/main/java/com/aaa/orchestrator/engine/AdBlockEngine.kt), [`BrowserScreen.kt`](file:///root/project/AAAX/app/src/main/java/com/aaa/orchestrator/ui/screens/BrowserScreen.kt))**:
+  - Integrated local asset-backed rule databases (`easylist_rules.txt` and `trackers_hosts.txt`) into an in-memory hash set lookup.
+  - Network-level request cancellation in `WebViewClient.shouldInterceptRequest`, returning empty responses for ad scripts, beacons, and trackers.
+  - DOM-level cosmetic ad hiding executing injected JavaScript on page load completion (`onPageFinished`) with `display: none !important;` to eliminate empty ad banners, sponsored containers, and floating promo overlays.
+  - Interactive `🛡️` shield badge on browser toolbar displaying real-time blocked ads and trackers count with 1-tap summary toast.
+- **Real-Time 2nr Phone Auto-Extraction ([`OrchestratorAccessibilityService.kt`](file:///root/project/AAAX/app/src/main/java/com/aaa/orchestrator/service/OrchestratorAccessibilityService.kt), [`MainActivity.kt`](file:///root/project/AAAX/app/src/main/java/com/aaa/orchestrator/MainActivity.kt))**:
+  - Implemented automatic node hierarchy inspection in `onAccessibilityEvent` when the native 2nr app is active (`pl.rs.sip.softphone`, `pl.m2nr`, `two_nr`).
+  - Automatically parses Polish mobile phone numbers (`+48...` or 9 digits) from visible node text or content descriptions.
+  - Connects `onPhoneDetected` to automatically update the active phone number in `OrchestratorEngine` without requiring manual typing or app switching.
+  - Cleared `onPhoneDetected` callback in `MainActivity.onDestroy()` to prevent memory leaks.
+
 ## [1.5.0] - 2026-10-01
 
 ### Added & Enhanced

@@ -23,8 +23,60 @@ class OrchestratorAccessibilityService : AccessibilityService() {
         Timber.i("OrchestratorAccessibilityService connected and ready.")
     }
 
+    private var lastDetectedPhone: String? = null
+
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
-        // Node inspection logic for 2nr and browser fields
+        if (event == null) return
+        val packageName = event.packageName?.toString() ?: ""
+        if (packageName.contains("pl.rs.sip.softphone") ||
+            packageName.contains("m2nr") ||
+            packageName.contains("two_nr") ||
+            packageName.contains("softphone")
+        ) {
+            try {
+                val rootNode = rootInActiveWindow ?: return
+                val phone = findPhoneNumberInNode(rootNode)
+                if (phone != null && phone != lastDetectedPhone) {
+                    lastDetectedPhone = phone
+                    Timber.i("AUTOMATICALLY CAPTURED PHONE NUMBER FROM 2NR: $phone")
+                    onPhoneDetected?.invoke(phone)
+                }
+            } catch (e: Exception) {
+                Timber.w(e, "Error inspecting 2nr node hierarchy")
+            }
+        }
+    }
+
+    private fun findPhoneNumberInNode(node: android.view.accessibility.AccessibilityNodeInfo?): String? {
+        if (node == null) return null
+        val text = node.text?.toString() ?: ""
+        val phone = extractPolishPhone(text)
+        if (phone != null) return phone
+
+        val desc = node.contentDescription?.toString() ?: ""
+        val phoneFromDesc = extractPolishPhone(desc)
+        if (phoneFromDesc != null) return phoneFromDesc
+
+        for (i in 0 until node.childCount) {
+            val child = node.getChild(i)
+            val found = findPhoneNumberInNode(child)
+            if (found != null) return found
+        }
+        return null
+    }
+
+    private fun extractPolishPhone(text: String): String? {
+        if (text.isBlank()) return null
+        val regex = Regex("(\\+48[\\s-]?)?([4-9]\\d{2}[\\s-]?\\d{3}[\\s-]?\\d{3})")
+        val match = regex.find(text) ?: return null
+        val rawDigits = match.value.filter { it.isDigit() }
+        return if (rawDigits.startsWith("48") && rawDigits.length == 11) {
+            "+$rawDigits"
+        } else if (rawDigits.length == 9) {
+            "+48$rawDigits"
+        } else if (rawDigits.length == 11) {
+            "+$rawDigits"
+        } else null
     }
 
     override fun onInterrupt() {
@@ -93,5 +145,6 @@ class OrchestratorAccessibilityService : AccessibilityService() {
 
         val isAutomationRunning = AtomicBoolean(false)
         var onKillSwitchTriggered: (() -> Unit)? = null
+        var onPhoneDetected: ((String) -> Unit)? = null
     }
 }

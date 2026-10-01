@@ -43,19 +43,24 @@ jobs:
       if: github.ref == 'refs/heads/main'
       uses: softprops/action-gh-release@v1
       with:
-        tag_name: v1.5.0
-        name: "AAA X-Orchestrator v1.5.0"
+        tag_name: v1.6.0
+        name: "AAA X-Orchestrator v1.6.0"
         body: |
-          ### AAA X-Orchestrator Production Release v1.5.0 (Macroify Permission Setup & Professional Browser Suite)
-          - **Macroify-Style Permission Setup Center**: Added interactive system permissions dashboard with 1-tap direct Android settings redirects for Accessibility Service, 2nr Notification Listener, Display Over Other Apps (Overlay), Battery Optimization Exemption, and Notifications.
+          ### AAA X-Orchestrator Production Release v1.6.0 (Accessibility 2nr Auto-Detection & Titanium AdBlock)
+          - **Automatic 2nr Phone Extraction**:
+            - Added live Accessibility node tree inspection in `OrchestratorAccessibilityService.kt`.
+            - Automatically detects Polish mobile phone numbers (`+48...`) from active 2nr window hierarchies (`pl.rs.sip.softphone`, `pl.m2nr`, `two_nr`) without manual typing or switching.
+          - **Titanium AdBlock & Anti-Tracking Engine**:
+            - Integrated `AdBlockEngine.kt` with offline asset-backed rule databases (`easylist_rules.txt` and `trackers_hosts.txt`).
+            - Network-level cancellation of advertising scripts, beacons, and trackers in `WebViewClient.shouldInterceptRequest`.
+            - DOM-level cosmetic ad hiding injecting CSS (`display: none !important;`) on page completion to eliminate empty ad banners.
+            - Interactive `🛡️` shield badge on browser toolbar displaying real-time blocked ads and trackers count.
+          - **Macroify-Style Permission Setup Center**:
+            - Added 1-tap direct Android settings navigation for Accessibility, 2nr Notification Listener, Overlay, Battery Optimization, and Notifications.
           - **Full Professional Browser Suite**:
-            - **Multi-Tab Architecture**: Open, switch, and close multiple tabs with dynamic tab counter badge.
-            - **Download Manager**: Native Android DownloadManager integration for file, APK, and document downloads.
-            - **Find in Page**: Search words and text on any loaded webpage with next/previous match jumping.
-            - **Bookmarks & Browsing History**: Save favorite sites with star button, browse history logs with timestamps.
-            - **Native Webpage Sharing**: 1-tap Android sharesheet to dispatch links.
-            - **Incognito / Private Mode**: Zero-trace browsing without saving history or cache.
-          - **Transparent AI Architecture**: Clarified Google ML Kit offline on-device vision neural network running 100% locally on Galaxy A30 for phone/captcha OCR with zero cloud reliance.
+            - Multi-tab manager, Android DownloadManager listener, in-page search (`findAllAsync`), bookmarks, history, and incognito mode.
+          - **Transparent On-Device AI**:
+            - Offline Google ML Kit OCR running 100% locally on Samsung Galaxy A30 with zero cloud data transmission.
         files: |
           app/build/outputs/apk/debug/app-debug.apk
         draft: false
