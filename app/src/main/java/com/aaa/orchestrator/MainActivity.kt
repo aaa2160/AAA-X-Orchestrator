@@ -11,6 +11,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.zIndex
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -173,7 +175,8 @@ class MainActivity : ComponentActivity() {
                         Box(
                             modifier = Modifier
                                 .fillMaxSize()
-                                .then(if (isBrowserTab) Modifier else Modifier.size(0.dp))
+                                .zIndex(if (isBrowserTab) 10f else -10f)
+                                .alpha(if (isBrowserTab) 1f else 0f)
                         ) {
                             BrowserScreen(
                                 engine = engine,

@@ -40,6 +40,9 @@ fun VaultScreen(
         else accounts.filter { it.username.contains(searchQuery, ignoreCase = true) }
     }
 
+    val scope = rememberCoroutineScope()
+    var isSyncing by remember { mutableStateOf(false) }
+
     if (showClearDialog) {
         AlertDialog(
             onDismissRequest = { showClearDialog = false },
@@ -91,6 +94,62 @@ fun VaultScreen(
 
             if (accounts.isNotEmpty()) {
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    FilledTonalButton(
+                        onClick = {
+                            if (!isSyncing) {
+                                isSyncing = true
+                                scope.launch {
+                                    var cfSuccess = 0
+                                    var sbSuccess = 0
+                                    var fbSuccess = 0
+                                    accounts.forEach { acc ->
+                                        if (com.aaa.orchestrator.engine.CloudIntegrationEngine.syncAccountToCloudflare(acc)) {
+                                            cfSuccess++
+                                        }
+                                        if (com.aaa.orchestrator.engine.CloudIntegrationEngine.syncAccountToSupabase(acc)) {
+                                            sbSuccess++
+                                        }
+                                        if (com.aaa.orchestrator.engine.CloudIntegrationEngine.syncAccountToFirebase(acc)) {
+                                            fbSuccess++
+                                        }
+                                    }
+                                    isSyncing = false
+                                    Toast.makeText(
+                                        context,
+                                        "Synced ${accounts.size} accounts: $cfSuccess Cloudflare D1, $sbSuccess Supabase, $fbSuccess Firebase",
+                                        Toast.LENGTH_LONG
+                                    ).show()
+                                }
+                            }
+                        },
+                        enabled = !isSyncing,
+                        shape = RoundedCornerShape(10.dp),
+                        colors = ButtonDefaults.filledTonalButtonColors(containerColor = SoftGreenTile),
+                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp)
+                    ) {
+                        if (isSyncing) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(14.dp),
+                                strokeWidth = 2.dp,
+                                color = SuccessGreen
+                            )
+                        } else {
+                            Icon(
+                                imageVector = Icons.Default.CloudSync,
+                                contentDescription = "Cloud Sync",
+                                tint = SuccessGreen,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = if (isSyncing) "Syncing..." else "Sync Cloud",
+                            color = SuccessGreen,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+
                     FilledTonalButton(
                         onClick = { shareAllAccounts(context, accounts) },
                         shape = RoundedCornerShape(10.dp),

@@ -2,6 +2,36 @@
 
 All notable changes and architectural configurations for this project are documented here.
 
+## [2.3.0] - 2026-10-01
+
+### Added & Enhanced
+- **Professional Chrome Browser Architecture ([`BrowserScreen.kt`](file:///root/project/AAAX/app/src/main/java/com/aaa/orchestrator/ui/screens/BrowserScreen.kt))**:
+  - Eliminated messy UI and dual bottom bar conflict with the app's main navigation bar. Web content now receives 100% full vertical viewport.
+  - Added Chrome-style top quick-action row to 3-dots overflow menu: `[ ← Back ]` `[ → Forward ]` `[ ★ Bookmark ]` `[ ↻ Reload ]` `[ ↗ Share ]`.
+  - Replaced persistent Auto-Pilot banner with an unobtrusive, floating 1-tap AutoFill pill that appears only on registration/challenge flows.
+- **Zero-Reset Tab & Navigation Preservation ([`BrowserScreen.kt`](file:///root/project/AAAX/app/src/main/java/com/aaa/orchestrator/ui/screens/BrowserScreen.kt), [`MainActivity.kt`](file:///root/project/AAAX/app/src/main/java/com/aaa/orchestrator/MainActivity.kt))**:
+  - Replaced `View.GONE` with `View.INVISIBLE` for background tabs: preserves rendering surface buffers, layout measurements, input text, and React 18 DOM tree without triggering resize events or form resets.
+  - Replaced `Modifier.size(0.dp)` on offscreen browser container in `MainActivity.kt` with `zIndex` and `alpha`, ensuring WebView dimensions remain constant (1080x2340) across tab navigation.
+  - Reused existing WebViews in `AndroidView` factory so recomposition never creates duplicate WebViews or reloads pages.
+  - Added real-time tab title and URL sync in `onPageFinished`.
+- **Strict Location Privacy Shield**:
+  - Hardened location protection with `settings.setGeolocationEnabled(false)`.
+  - Automatically denied physical GPS/network location disclosure in `WebChromeClient.onGeolocationPermissionsShowPrompt`.
+  - Injected `geoPrivacyScript` overriding `navigator.geolocation` with Frankfurt Gateway coordinates and intercepting `navigator.permissions.query({ name: 'geolocation' })`.
+- **Camera & Face Verification (KYC) Permissions**:
+  - Handled WebChromeClient permission requests by launching dual `CAMERA` and `RECORD_AUDIO` permissions via `ActivityResultContracts.RequestMultiplePermissions()`.
+  - Integrated file upload chooser for selfie and document uploads during verification.
+- **Open-Source MX Player Enhancements ([`BrowserScreen.kt`](file:///root/project/AAAX/app/src/main/java/com/aaa/orchestrator/ui/screens/BrowserScreen.kt))**:
+  - Added signature 200% Audio Volume Boost utilizing Web Audio API `AudioContext` and `GainNode`.
+  - Added Video Aspect Ratio toggle cycling between Fit to Screen (`contain`), Stretch (`fill`), and Zoom/Crop (`cover`).
+  - Retained brightness/volume vertical drag gestures, double-tap seek, PiP mode, and 1-tap stream downloader saving to `/storage/emulated/0/Download/AAAX/`.
+- **Multi-Cloud Expansion & Firebase Integration ([`CloudIntegrationEngine.kt`](file:///root/project/AAAX/app/src/main/java/com/aaa/orchestrator/engine/CloudIntegrationEngine.kt), [`CloudSyncRepository.kt`](file:///root/project/AAAX/app/src/main/java/com/aaa/orchestrator/data/repository/CloudSyncRepository.kt), [`SettingsScreen.kt`](file:///root/project/AAAX/app/src/main/java/com/aaa/orchestrator/ui/screens/SettingsScreen.kt))**:
+  - Added Google Cloud Firebase Realtime Database REST endpoint, latency test, and account sync (`gen-lang-client-0633111390-default-rtdb`).
+  - Added live "Ping Firebase" diagnostic card in `SettingsScreen.kt`.
+  - Added fan-out sync to Firebase Realtime DB in `CloudSyncRepository.kt`.
+- **1-Tap Cloud Sync in Accounts Vault ([`VaultScreen.kt`](file:///root/project/AAAX/app/src/main/java/com/aaa/orchestrator/ui/screens/VaultScreen.kt))**:
+  - Added "Sync Cloud" button in VaultScreen top bar with live progress indicator, bulk syncing all local accounts to Cloudflare D1, Supabase, and Firebase Realtime Database.
+
 ## [2.2.0] - 2026-10-01
 
 ### Added & Enhanced

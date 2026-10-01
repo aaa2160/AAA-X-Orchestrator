@@ -32,6 +32,12 @@ class CloudSyncRepository(
         // Sync immediately to Cloudflare D1 Serverless Database
         com.aaa.orchestrator.engine.CloudIntegrationEngine.syncAccountToCloudflare(account)
 
+        // Sync immediately to Supabase Realtime Database
+        com.aaa.orchestrator.engine.CloudIntegrationEngine.syncAccountToSupabase(account)
+
+        // Sync immediately to Firebase Realtime Database
+        com.aaa.orchestrator.engine.CloudIntegrationEngine.syncAccountToFirebase(account)
+
         // Sync immediately to Render Cloud Orchestrator backend
         dispatchRenderCloudSync(account)
 

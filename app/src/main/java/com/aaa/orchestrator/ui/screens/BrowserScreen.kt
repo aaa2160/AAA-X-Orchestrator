@@ -141,8 +141,8 @@ fun BrowserScreen(
     }
     var history by remember { mutableStateOf(mutableListOf<HistoryItem>()) }
 
-    // Sleek Auto-Pilot HUD State
-    var isHudVisible by remember { mutableStateOf(true) }
+    // Sleek Auto-Pilot HUD State (Collapsed by default for Chrome-like clean browsing)
+    var isHudVisible by remember { mutableStateOf(false) }
     var isHudExpanded by remember { mutableStateOf(false) }
     var showPhoneEditDialog by remember { mutableStateOf(false) }
     var phoneInputText by remember { mutableStateOf("") }
@@ -171,14 +171,15 @@ fun BrowserScreen(
 
     LaunchedEffect(isVisible) {
         if (activeWebView != null) {
-            activeWebView?.visibility = if (isVisible) View.VISIBLE else View.GONE
+            activeWebView?.visibility = if (isVisible) View.VISIBLE else View.INVISIBLE
         }
     }
 
     val cameraLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.RequestPermission()
-    ) { isGranted ->
-        if (isGranted) {
+        contract = ActivityResultContracts.RequestMultiplePermissions()
+    ) { permissions ->
+        val cameraGranted = permissions[android.Manifest.permission.CAMERA] ?: false
+        if (cameraGranted) {
             pendingWebPermission?.grant(pendingWebPermission?.resources)
         } else {
             pendingWebPermission?.deny()
@@ -357,6 +358,58 @@ fun BrowserScreen(
     // AdBlock Engine
     val adBlockEngine = remember { AdBlockEngine(context) }
 
+    var videoAspectMode by remember { mutableStateOf("Fit") }
+
+    fun boostAudioVolume() {
+        showGestureFeedback(Icons.Default.VolumeUp, "Audio Boost: 200%")
+        activeWebView?.evaluateJavascript(
+            """
+            (function() {
+                var v = document.querySelector('video');
+                if (v) {
+                    try {
+                        var AudioContext = window.AudioContext || window.webkitAudioContext;
+                        if (AudioContext && !v._audioBoosted) {
+                            var ctx = new AudioContext();
+                            var src = ctx.createMediaElementSource(v);
+                            var gain = ctx.createGain();
+                            gain.gain.value = 2.0;
+                            src.connect(gain);
+                            gain.connect(ctx.destination);
+                            v._audioBoosted = true;
+                        }
+                    } catch(e) {}
+                }
+            })();
+            """.trimIndent(), null
+        )
+    }
+
+    fun cycleAspectMode() {
+        val nextMode = when (videoAspectMode) {
+            "Fit" -> "Stretch"
+            "Stretch" -> "Zoom"
+            else -> "Fit"
+        }
+        videoAspectMode = nextMode
+        showGestureFeedback(Icons.Default.AspectRatio, "Aspect: $nextMode")
+        val cssObjectFit = when (nextMode) {
+            "Stretch" -> "fill"
+            "Zoom" -> "cover"
+            else -> "contain"
+        }
+        activeWebView?.evaluateJavascript(
+            """
+            (function() {
+                var videos = document.querySelectorAll('video');
+                for (var i = 0; i < videos.length; i++) {
+                    videos[i].style.objectFit = '$cssObjectFit';
+                }
+            })();
+            """.trimIndent(), null
+        )
+    }
+
     // Geolocation Privacy Spoof Script (Frankfurt Gateway)
     val geoPrivacyScript = """
         (function() {
@@ -372,15 +425,23 @@ fun BrowserScreen(
                 };
                 var fakePos = { coords: fakeCoords, timestamp: Date.now() };
                 var fakeGeo = {
-                    getCurrentPosition: function(s, e, o) { if (typeof s === 'function') s(fakePos); },
-                    watchPosition: function(s, e, o) { if (typeof s === 'function') s(fakePos); return 101; },
+                    getCurrentPosition: function(s, e, o) { 
+                        if (typeof s === 'function') {
+                            setTimeout(function() { s(fakePos); }, 20);
+                        } 
+                    },
+                    watchPosition: function(s, e, o) { 
+                        if (typeof s === 'function') {
+                            setTimeout(function() { s(fakePos); }, 20);
+                        } 
+                        return 101; 
+                    },
                     clearWatch: function(id) {}
                 };
                 try {
                     Object.defineProperty(navigator, 'geolocation', {
-                        value: fakeGeo,
-                        configurable: true,
-                        writable: true
+                        get: function() { return fakeGeo; },
+                        configurable: true
                     });
                 } catch(e) {
                     try {
@@ -388,6 +449,15 @@ fun BrowserScreen(
                         navigator.geolocation.watchPosition = fakeGeo.watchPosition;
                         navigator.geolocation.clearWatch = fakeGeo.clearWatch;
                     } catch(e2) {}
+                }
+                if (navigator.permissions && navigator.permissions.query) {
+                    var origQuery = navigator.permissions.query.bind(navigator.permissions);
+                    navigator.permissions.query = function(desc) {
+                        if (desc && desc.name === 'geolocation') {
+                            return Promise.resolve({ state: 'granted', onchange: null });
+                        }
+                        return origQuery(desc);
+                    };
                 }
             } catch(err) {}
         })();
@@ -468,7 +538,10 @@ fun BrowserScreen(
                 cacheMode = WebSettings.LOAD_DEFAULT
                 mixedContentMode = WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE
                 userAgentString = if (isDesktopMode) desktopUserAgent else mobileUserAgent
+                setGeolocationEnabled(false)
             }
+
+            visibility = View.INVISIBLE
 
             // Enable and manage cookies
             val cookieManager = CookieManager.getInstance()
@@ -556,11 +629,18 @@ fun BrowserScreen(
                     val activity = ctx as? android.app.Activity
                     if (activity != null) {
                         activity.runOnUiThread {
-                            if (ctx.checkSelfPermission(android.Manifest.permission.CAMERA) == android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                            val hasCamera = ctx.checkSelfPermission(android.Manifest.permission.CAMERA) == android.content.pm.PackageManager.PERMISSION_GRANTED
+                            val hasAudio = ctx.checkSelfPermission(android.Manifest.permission.RECORD_AUDIO) == android.content.pm.PackageManager.PERMISSION_GRANTED
+                            if (hasCamera && hasAudio) {
                                 request?.grant(reqResources)
                             } else {
                                 pendingWebPermission = request
-                                cameraLauncher.launch(android.Manifest.permission.CAMERA)
+                                cameraLauncher.launch(
+                                    arrayOf(
+                                        android.Manifest.permission.CAMERA,
+                                        android.Manifest.permission.RECORD_AUDIO
+                                    )
+                                )
                             }
                         }
                     } else {
@@ -668,6 +748,15 @@ fun BrowserScreen(
                         canGoForward = view?.canGoForward() == true
                     }
 
+                    // Update the tab's url and title so tab switcher stays accurate
+                    val tabIndex = tabs.indexOfFirst { it.id == tab.id }
+                    if (tabIndex != -1 && url != null) {
+                        val updated = tabs.toMutableList()
+                        val currentTitle = view?.title ?: updated[tabIndex].title
+                        updated[tabIndex] = updated[tabIndex].copy(url = url, title = currentTitle)
+                        tabs = updated
+                    }
+
                     // Apply cosmetic ad hiding
                     adBlockEngine.injectCosmeticAdHiding(view)
 
@@ -701,11 +790,6 @@ fun BrowserScreen(
             val oldTab = tabs.getOrNull(activeTabIndex)
             val newTab = tabs[newIndex]
 
-            // Hide old webview
-            if (oldTab != null) {
-                webViewPool[oldTab.id]?.visibility = View.GONE
-            }
-
             // Get or create new webview
             val newWebView = webViewPool[newTab.id] ?: run {
                 val created = createConfiguredWebView(context, newTab)
@@ -714,8 +798,21 @@ fun BrowserScreen(
                 created
             }
 
-            newWebView.visibility = View.VISIBLE
-            newWebView.bringToFront()
+            // Ensure properly attached
+            if (newWebView.parent != containerLayout) {
+                (newWebView.parent as? ViewGroup)?.removeView(newWebView)
+                containerLayout?.addView(newWebView)
+            }
+
+            // Manage visibility cleanly: ACTIVE is VISIBLE, all others are INVISIBLE (preserving layout!)
+            webViewPool.forEach { (tabId, wv) ->
+                if (tabId == newTab.id) {
+                    wv.visibility = View.VISIBLE
+                    wv.bringToFront()
+                } else {
+                    wv.visibility = View.INVISIBLE
+                }
+            }
 
             activeTabIndex = newIndex
             activeWebView = newWebView
@@ -948,6 +1045,100 @@ fun BrowserScreen(
                         expanded = showMenu,
                         onDismissRequest = { showMenu = false }
                     ) {
+                        // Chrome Quick Action Row: Back, Forward, Bookmark, Reload, Share
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 8.dp, vertical = 4.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            IconButton(
+                                onClick = {
+                                    showMenu = false
+                                    activeWebView?.goBack()
+                                },
+                                enabled = canGoBack,
+                                modifier = Modifier.size(36.dp)
+                            ) {
+                                Icon(
+                                    Icons.Default.ArrowBack,
+                                    contentDescription = "Back",
+                                    tint = if (canGoBack) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f),
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                            IconButton(
+                                onClick = {
+                                    showMenu = false
+                                    activeWebView?.goForward()
+                                },
+                                enabled = canGoForward,
+                                modifier = Modifier.size(36.dp)
+                            ) {
+                                Icon(
+                                    Icons.Default.ArrowForward,
+                                    contentDescription = "Forward",
+                                    tint = if (canGoForward) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f),
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                            val isBookmarked = bookmarks.contains(currentUrl)
+                            IconButton(
+                                onClick = {
+                                    if (isBookmarked) {
+                                        bookmarks.remove(currentUrl)
+                                        Toast.makeText(context, "Bookmark removed", Toast.LENGTH_SHORT).show()
+                                    } else {
+                                        bookmarks.add(currentUrl)
+                                        Toast.makeText(context, "Bookmark saved", Toast.LENGTH_SHORT).show()
+                                    }
+                                    showMenu = false
+                                },
+                                modifier = Modifier.size(36.dp)
+                            ) {
+                                Icon(
+                                    imageVector = if (isBookmarked) Icons.Default.Bookmark else Icons.Default.BookmarkBorder,
+                                    contentDescription = "Bookmark",
+                                    tint = if (isBookmarked) PrimaryBlue else MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                            IconButton(
+                                onClick = {
+                                    showMenu = false
+                                    activeWebView?.reload()
+                                },
+                                modifier = Modifier.size(36.dp)
+                            ) {
+                                Icon(
+                                    Icons.Default.Refresh,
+                                    contentDescription = "Reload",
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                            IconButton(
+                                onClick = {
+                                    showMenu = false
+                                    val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                                        type = "text/plain"
+                                        putExtra(Intent.EXTRA_TEXT, currentUrl)
+                                    }
+                                    context.startActivity(Intent.createChooser(shareIntent, "Share URL"))
+                                },
+                                modifier = Modifier.size(36.dp)
+                            ) {
+                                Icon(
+                                    Icons.Default.Share,
+                                    contentDescription = "Share",
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                        }
+                        HorizontalDivider()
+
                         DropdownMenuItem(
                             text = { Text("New tab") },
                             leadingIcon = { Icon(Icons.Default.Add, contentDescription = null) },
@@ -1334,11 +1525,19 @@ fun BrowserScreen(
                             ViewGroup.LayoutParams.MATCH_PARENT
                         )
 
-                        // Initialize the initial tab webview
-                        val initialTab = tabs[0]
-                        val initialWebView = createConfiguredWebView(ctx, initialTab)
-                        webViewPool[initialTab.id] = initialWebView
+                        // Initialize or reuse initial tab webview
+                        val initialTab = tabs.getOrNull(activeTabIndex) ?: tabs[0]
+                        val existingWv = webViewPool[initialTab.id]
+                        val initialWebView = if (existingWv != null) {
+                            (existingWv.parent as? ViewGroup)?.removeView(existingWv)
+                            existingWv
+                        } else {
+                            val created = createConfiguredWebView(ctx, initialTab)
+                            webViewPool[initialTab.id] = created
+                            created
+                        }
                         addView(initialWebView)
+                        initialWebView.visibility = View.VISIBLE
                         activeWebView = initialWebView
                     }
                 },
@@ -1349,6 +1548,14 @@ fun BrowserScreen(
                         if (wv.parent != layout) {
                             (wv.parent as? ViewGroup)?.removeView(wv)
                             layout.addView(wv)
+                        }
+                    }
+                    val currentTab = tabs.getOrNull(activeTabIndex)
+                    if (currentTab != null) {
+                        val active = webViewPool[currentTab.id]
+                        if (active != null && active.visibility != View.VISIBLE) {
+                            active.visibility = View.VISIBLE
+                            active.bringToFront()
                         }
                     }
                 }
@@ -1424,126 +1631,6 @@ fun BrowserScreen(
                         )
                     }
                 }
-            }
-        }
-
-        // ==========================================
-        // 5. CHROME-STYLE BOTTOM NAVIGATION BAR
-        // ==========================================
-        Surface(
-            color = MaterialTheme.colorScheme.surface,
-            tonalElevation = 2.dp,
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(44.dp)
-                    .padding(horizontal = 8.dp),
-                horizontalArrangement = Arrangement.SpaceAround,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                // Back Button
-                IconButton(
-                    onClick = { activeWebView?.goBack() },
-                    enabled = canGoBack,
-                    modifier = Modifier.size(36.dp)
-                ) {
-                    Icon(
-                        Icons.Default.ArrowBack,
-                        contentDescription = "Back",
-                        tint = if (canGoBack) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f),
-                        modifier = Modifier.size(18.dp)
-                    )
-                }
-
-                // Forward Button
-                IconButton(
-                    onClick = { activeWebView?.goForward() },
-                    enabled = canGoForward,
-                    modifier = Modifier.size(36.dp)
-                ) {
-                    Icon(
-                        Icons.Default.ArrowForward,
-                        contentDescription = "Forward",
-                        tint = if (canGoForward) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f),
-                        modifier = Modifier.size(18.dp)
-                    )
-                }
-
-                // Find in Page Shortcut
-                IconButton(
-                    onClick = {
-                        isFindInPageVisible = !isFindInPageVisible
-                        if (!isFindInPageVisible) {
-                            findQuery = ""
-                            activeWebView?.clearMatches()
-                        }
-                    },
-                    modifier = Modifier.size(36.dp)
-                ) {
-                    Icon(
-                        Icons.Default.Search,
-                        contentDescription = "Find in Page",
-                        tint = if (isFindInPageVisible) PrimaryBlue else MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.size(18.dp)
-                    )
-                }
-
-                // MX Media Tools Shortcut
-                IconButton(
-                    onClick = { showMediaController = true },
-                    modifier = Modifier.size(36.dp)
-                ) {
-                    Icon(
-                        Icons.Default.PlayCircle,
-                        contentDescription = "MX Player Media Tools",
-                        tint = PrimaryBlue,
-                        modifier = Modifier.size(20.dp)
-                    )
-                }
-
-                // Bookmark Toggle
-                val isBookmarked = bookmarks.contains(currentUrl)
-                IconButton(
-                    onClick = {
-                        if (isBookmarked) {
-                            bookmarks.remove(currentUrl)
-                            Toast.makeText(context, "Bookmark removed", Toast.LENGTH_SHORT).show()
-                        } else {
-                            bookmarks.add(currentUrl)
-                            Toast.makeText(context, "Bookmark saved", Toast.LENGTH_SHORT).show()
-                        }
-                    },
-                    modifier = Modifier.size(36.dp)
-                ) {
-                    Icon(
-                        imageVector = if (isBookmarked) Icons.Default.Bookmark else Icons.Default.BookmarkBorder,
-                        contentDescription = "Bookmark",
-                        tint = if (isBookmarked) PrimaryBlue else MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.size(18.dp)
-                    )
-                }
-
-                // Share URL
-                IconButton(
-                    onClick = {
-                        val shareIntent = Intent(Intent.ACTION_SEND).apply {
-                            type = "text/plain"
-                            putExtra(Intent.EXTRA_TEXT, currentUrl)
-                        }
-                        context.startActivity(Intent.createChooser(shareIntent, "Share URL"))
-                    },
-                    modifier = Modifier.size(36.dp)
-                ) {
-                    Icon(
-                        Icons.Default.Share,
-                        contentDescription = "Share",
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.size(18.dp)
-                    )
-                }
-            }
         }
     }
 
@@ -1739,6 +1826,38 @@ fun BrowserScreen(
                     Spacer(modifier = Modifier.height(14.dp))
 
                     Text("Media Controls", fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    // 200% Audio Volume Boost Button
+                    OutlinedButton(
+                        onClick = {
+                            boostAudioVolume()
+                            showMediaController = false
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Icon(Icons.Default.VolumeUp, contentDescription = null, modifier = Modifier.size(16.dp), tint = SuccessGreen)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("200% Audio Volume Boost", fontSize = 12.sp, color = SuccessGreen, fontWeight = FontWeight.SemiBold)
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    // Video Aspect Ratio Toggle (Fit / Stretch / Zoom)
+                    OutlinedButton(
+                        onClick = {
+                            cycleAspectMode()
+                            showMediaController = false
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Icon(Icons.Default.AspectRatio, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Aspect Ratio: $videoAspectMode", fontSize = 12.sp)
+                    }
+
                     Spacer(modifier = Modifier.height(8.dp))
 
                     // PiP Button

@@ -41,6 +41,7 @@ fun SettingsScreen(
     var groqStatus by remember { mutableStateOf("Ready to Ping") }
     var openRouterStatus by remember { mutableStateOf("Ready to Ping") }
     var telegramStatus by remember { mutableStateOf("Ready to Ping") }
+    var firebaseStatus by remember { mutableStateOf("Ready to Ping") }
 
     fun refreshPermissions() {
         permissionsList = PermissionManager.getAllPermissions(context)
@@ -232,6 +233,25 @@ fun SettingsScreen(
                     telegramStatus = "Pinging Bot..."
                     val (ok, msg) = CloudIntegrationEngine.testTelegram()
                     telegramStatus = msg
+                }
+            }
+        )
+
+        Spacer(modifier = Modifier.height(10.dp))
+
+        // Firebase Realtime Database Card
+        CloudServiceCard(
+            title = "Firebase Realtime DB",
+            subtitle = "Google Cloud Realtime Sync & Backup",
+            details = "Project: gen-lang-client-0633111390 (AAA-TEAM)\nDatabase: gen-lang-client-0633111390-default-rtdb\nMode: Realtime JSON REST Endpoint",
+            status = firebaseStatus,
+            icon = Icons.Default.CloudQueue,
+            iconTint = WarningAmber,
+            onPing = {
+                scope.launch {
+                    firebaseStatus = "Pinging Firebase..."
+                    val (ok, msg) = CloudIntegrationEngine.testFirebase()
+                    firebaseStatus = msg
                 }
             }
         )

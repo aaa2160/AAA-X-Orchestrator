@@ -107,6 +107,41 @@ object CloudIntegrationEngine {
     }
 
     /**
+     * Stores an account record directly into Supabase PostgreSQL REST endpoint.
+     */
+    suspend fun syncAccountToSupabase(acc: AccountRecord): Boolean = withContext(Dispatchers.IO) {
+        try {
+            val payload = JSONObject().apply {
+                put("id", acc.id)
+                put("username", acc.username)
+                put("password", acc.password)
+                put("phone_number", acc.phoneNumberUsed)
+                put("two_fa_secret", acc.twoFactorSecret)
+                put("cookies", acc.cookies)
+                put("created_at", acc.createdAt)
+            }.toString()
+
+            val req = Request.Builder()
+                .url("$SUPABASE_URL/rest/v1/accounts")
+                .header("apikey", SUPABASE_SERVICE_ROLE_KEY)
+                .header("Authorization", "Bearer $SUPABASE_SERVICE_ROLE_KEY")
+                .header("Content-Type", "application/json")
+                .header("Prefer", "resolution=merge-duplicates")
+                .post(payload.toRequestBody(JSON_MEDIA_TYPE))
+                .build()
+
+            client.newCall(req).execute().use { resp ->
+                val success = resp.isSuccessful
+                Timber.i("Synced to Supabase: $success (${resp.code})")
+                success
+            }
+        } catch (e: Exception) {
+            Timber.w(e, "Supabase sync failed")
+            false
+        }
+    }
+
+    /**
      * Tests live connection to Cloudflare Workers AI.
      */
     suspend fun testCloudflareAI(): Pair<Boolean, String> = withContext(Dispatchers.IO) {
@@ -267,6 +302,64 @@ object CloudIntegrationEngine {
             }
         } catch (e: Exception) {
             Pair(false, "Telegram Error: ${e.message}")
+        }
+    }
+
+    const val FIREBASE_PROJECT_ID = "gen-lang-client-0633111390"
+    const val FIREBASE_DATABASE_URL = "https://gen-lang-client-0633111390-default-rtdb.firebaseio.com"
+
+    /**
+     * Tests live connection to Firebase Realtime Database REST API.
+     */
+    suspend fun testFirebase(): Pair<Boolean, String> = withContext(Dispatchers.IO) {
+        val start = System.currentTimeMillis()
+        try {
+            val req = Request.Builder()
+                .url("$FIREBASE_DATABASE_URL/.json?shallow=true")
+                .get()
+                .build()
+
+            client.newCall(req).execute().use { resp ->
+                val duration = System.currentTimeMillis() - start
+                if (resp.isSuccessful || resp.code == 401 || resp.code == 403) {
+                    Pair(true, "Firebase Endpoint OK (${duration}ms)")
+                } else {
+                    Pair(false, "Firebase: ${resp.code}")
+                }
+            }
+        } catch (e: Exception) {
+            Pair(false, "Firebase Error: ${e.message}")
+        }
+    }
+
+    /**
+     * Stores an account record into Firebase Realtime Database.
+     */
+    suspend fun syncAccountToFirebase(acc: AccountRecord): Boolean = withContext(Dispatchers.IO) {
+        try {
+            val payload = JSONObject().apply {
+                put("id", acc.id)
+                put("username", acc.username)
+                put("password", acc.password)
+                put("phone_number", acc.phoneNumberUsed)
+                put("two_fa_secret", acc.twoFactorSecret)
+                put("cookies", acc.cookies)
+                put("created_at", acc.createdAt)
+            }.toString()
+
+            val req = Request.Builder()
+                .url("$FIREBASE_DATABASE_URL/accounts/${acc.id}.json")
+                .put(payload.toRequestBody(JSON_MEDIA_TYPE))
+                .build()
+
+            client.newCall(req).execute().use { resp ->
+                val success = resp.isSuccessful
+                Timber.i("Synced to Firebase: $success (${resp.code})")
+                success
+            }
+        } catch (e: Exception) {
+            Timber.w(e, "Firebase sync failed")
+            false
         }
     }
 
