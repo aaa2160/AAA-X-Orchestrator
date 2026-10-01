@@ -155,9 +155,22 @@ fun BrowserScreen(
     val cameraLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestMultiplePermissions()
     ) { permissions ->
-        val cameraGranted = permissions[android.Manifest.permission.CAMERA] ?: false
-        if (cameraGranted) {
-            pendingWebPermission?.grant(pendingWebPermission?.resources)
+        val cameraGranted = (permissions[android.Manifest.permission.CAMERA] ?: false) ||
+                context.checkSelfPermission(android.Manifest.permission.CAMERA) == android.content.pm.PackageManager.PERMISSION_GRANTED
+        val audioGranted = (permissions[android.Manifest.permission.RECORD_AUDIO] ?: false) ||
+                context.checkSelfPermission(android.Manifest.permission.RECORD_AUDIO) == android.content.pm.PackageManager.PERMISSION_GRANTED
+
+        val grantedResources = mutableListOf<String>()
+        pendingWebPermission?.resources?.forEach { res ->
+            if (res == PermissionRequest.RESOURCE_VIDEO_CAPTURE && cameraGranted) {
+                grantedResources.add(res)
+            } else if (res == PermissionRequest.RESOURCE_AUDIO_CAPTURE && audioGranted) {
+                grantedResources.add(res)
+            }
+        }
+
+        if (grantedResources.isNotEmpty()) {
+            pendingWebPermission?.grant(grantedResources.toTypedArray())
         } else {
             pendingWebPermission?.deny()
             Toast.makeText(context, "Camera permission needed for face verification", Toast.LENGTH_SHORT).show()
@@ -604,18 +617,27 @@ fun BrowserScreen(
                     val activity = ctx as? android.app.Activity
                     if (activity != null) {
                         activity.runOnUiThread {
-                            val hasCamera = ctx.checkSelfPermission(android.Manifest.permission.CAMERA) == android.content.pm.PackageManager.PERMISSION_GRANTED
-                            val hasAudio = ctx.checkSelfPermission(android.Manifest.permission.RECORD_AUDIO) == android.content.pm.PackageManager.PERMISSION_GRANTED
+                            val needsCamera = reqResources.contains(PermissionRequest.RESOURCE_VIDEO_CAPTURE)
+                            val needsAudio = reqResources.contains(PermissionRequest.RESOURCE_AUDIO_CAPTURE)
+                            val hasCamera = !needsCamera || ctx.checkSelfPermission(android.Manifest.permission.CAMERA) == android.content.pm.PackageManager.PERMISSION_GRANTED
+                            val hasAudio = !needsAudio || ctx.checkSelfPermission(android.Manifest.permission.RECORD_AUDIO) == android.content.pm.PackageManager.PERMISSION_GRANTED
+
                             if (hasCamera && hasAudio) {
                                 request?.grant(reqResources)
                             } else {
                                 pendingWebPermission = request
-                                cameraLauncher.launch(
-                                    arrayOf(
-                                        android.Manifest.permission.CAMERA,
-                                        android.Manifest.permission.RECORD_AUDIO
-                                    )
-                                )
+                                val perms = mutableListOf<String>()
+                                if (needsCamera && ctx.checkSelfPermission(android.Manifest.permission.CAMERA) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                                    perms.add(android.Manifest.permission.CAMERA)
+                                }
+                                if (needsAudio && ctx.checkSelfPermission(android.Manifest.permission.RECORD_AUDIO) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                                    perms.add(android.Manifest.permission.RECORD_AUDIO)
+                                }
+                                if (perms.isNotEmpty()) {
+                                    cameraLauncher.launch(perms.toTypedArray())
+                                } else {
+                                    request?.grant(reqResources)
+                                }
                             }
                         }
                     } else {

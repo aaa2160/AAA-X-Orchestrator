@@ -14,8 +14,11 @@ All notable changes and architectural configurations for this project are docume
     1. **Normal Everyday Browser (`NavTab.Browser`)**: Dedicated to user's daily browsing, Google search, streaming video, bookmarks, and tabs. Features open-source MX Player enhancements (200% volume boost, aspect ratio switcher, gesture brightness/volume, stream downloader). Strictly free of any automation scripts, form hijacking, or bot popups.
     2. **Dedicated Automation Browser (`NavTab.Automation` - "Auto Bot")**: Dedicated to autonomous Twitter/X signup flows, AutoPilot React 18 DOM scripts, automatic OTP injection, stealth proxy routing, and biometric KYC face verification camera prompt.
   - Hoisted state via `BrowserTabManager` maintaining separate `normalTabs`/`normalWebViewPool` and `autoTabs`/`autoWebViewPool`.
-  - Added 5-tab Material 3 bottom navigation: `Dashboard`, `Browser`, `Auto Bot`, `Vault`, and `Settings`.
-  - Fixed Kotlin snapshot state mutation compilation errors on `tabs[index].title` and `tabs[index].url`.
+- **Comprehensive Permission Architecture ([`MainActivity.kt`](file:///root/project/AAAX/app/src/main/java/com/aaa/orchestrator/MainActivity.kt), [`PermissionManager.kt`](file:///root/project/AAAX/app/src/main/java/com/aaa/orchestrator/engine/PermissionManager.kt), [`BrowserScreen.kt`](file:///root/project/AAAX/app/src/main/java/com/aaa/orchestrator/ui/screens/BrowserScreen.kt))**:
+  - Added comprehensive startup runtime permission requests for Camera, Microphone (`RECORD_AUDIO`), Notifications, and Media/Storage access (`READ_MEDIA_IMAGES`/`WRITE_EXTERNAL_STORAGE`).
+  - Added individual permission tracking and 1-tap settings redirects for Microphone and Storage Access in `PermissionManager`.
+  - Refined WebChromeClient `onPermissionRequest` and Compose `cameraLauncher` in `BrowserScreen` to selectively inspect requested WebRTC resources (`RESOURCE_VIDEO_CAPTURE` and `RESOURCE_AUDIO_CAPTURE`), granting verified resources immediately and prompting only for missing permissions during KYC face verification.
+  - Refined 5-tab Material 3 bottom navigation with persistent 11sp labels and pill indicator styling for mobile devices.
 
 ### Added & Multi-Cloud Expansion
 - **Turso libSQL Edge SQLite Integration ([`CloudIntegrationEngine.kt`](file:///root/project/AAAX/app/src/main/java/com/aaa/orchestrator/engine/CloudIntegrationEngine.kt), [`CloudSyncRepository.kt`](file:///root/project/AAAX/app/src/main/java/com/aaa/orchestrator/data/repository/CloudSyncRepository.kt))**:

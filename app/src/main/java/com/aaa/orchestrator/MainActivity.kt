@@ -48,14 +48,30 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // Runtime Permissions (Notifications & Camera for Face Verification)
+        // Runtime Permissions (Camera, Audio/Mic for KYC, Storage for Exports, Notifications)
         val permsToRequest = mutableListOf<String>()
         if (checkSelfPermission(android.Manifest.permission.CAMERA) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
             permsToRequest.add(android.Manifest.permission.CAMERA)
         }
+        if (checkSelfPermission(android.Manifest.permission.RECORD_AUDIO) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            permsToRequest.add(android.Manifest.permission.RECORD_AUDIO)
+        }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             if (checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
                 permsToRequest.add(android.Manifest.permission.POST_NOTIFICATIONS)
+            }
+            if (checkSelfPermission(android.Manifest.permission.READ_MEDIA_IMAGES) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                permsToRequest.add(android.Manifest.permission.READ_MEDIA_IMAGES)
+            }
+            if (checkSelfPermission(android.Manifest.permission.READ_MEDIA_VIDEO) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                permsToRequest.add(android.Manifest.permission.READ_MEDIA_VIDEO)
+            }
+        } else {
+            if (checkSelfPermission(android.Manifest.permission.READ_EXTERNAL_STORAGE) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                permsToRequest.add(android.Manifest.permission.READ_EXTERNAL_STORAGE)
+            }
+            if (checkSelfPermission(android.Manifest.permission.WRITE_EXTERNAL_STORAGE) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                permsToRequest.add(android.Manifest.permission.WRITE_EXTERNAL_STORAGE)
             }
         }
         if (permsToRequest.isNotEmpty()) {
@@ -118,11 +134,13 @@ class MainActivity : ComponentActivity() {
                                 NavigationBarItem(
                                     selected = selectedTab == tab,
                                     onClick = { selectedTab = tab },
-                                    icon = { Icon(tab.icon, contentDescription = tab.title) },
-                                    label = { Text(tab.title) },
+                                    icon = { Icon(tab.icon, contentDescription = tab.title, modifier = Modifier.size(22.dp)) },
+                                    label = { Text(tab.title, maxLines = 1, fontSize = 11.sp, fontWeight = if (selectedTab == tab) FontWeight.Bold else FontWeight.Normal) },
+                                    alwaysShowLabel = true,
                                     colors = NavigationBarItemDefaults.colors(
                                         selectedIconColor = PrimaryBlue,
                                         selectedTextColor = PrimaryBlue,
+                                        indicatorColor = PrimaryBlue.copy(alpha = 0.12f),
                                         unselectedIconColor = TextMuted,
                                         unselectedTextColor = TextMuted
                                     )

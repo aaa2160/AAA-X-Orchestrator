@@ -107,6 +107,42 @@ object PermissionManager {
                 }
             ),
             PermissionStatus(
+                title = "Microphone (Audio & Verification)",
+                description = "Permits microphone recording for interactive KYC security verification",
+                isGranted = context.checkSelfPermission(android.Manifest.permission.RECORD_AUDIO) == android.content.pm.PackageManager.PERMISSION_GRANTED,
+                onGrant = { ctx ->
+                    try {
+                        val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                            data = Uri.parse("package:${ctx.packageName}")
+                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        }
+                        ctx.startActivity(intent)
+                    } catch (e: Exception) {
+                        Timber.e(e, "Cannot open app permission settings")
+                    }
+                }
+            ),
+            PermissionStatus(
+                title = "Storage & Media Access",
+                description = "Permits saving exported accounts and downloads to /storage/emulated/0/Download/AAAX/",
+                isGranted = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    context.checkSelfPermission(android.Manifest.permission.READ_MEDIA_IMAGES) == android.content.pm.PackageManager.PERMISSION_GRANTED
+                } else {
+                    context.checkSelfPermission(android.Manifest.permission.WRITE_EXTERNAL_STORAGE) == android.content.pm.PackageManager.PERMISSION_GRANTED
+                },
+                onGrant = { ctx ->
+                    try {
+                        val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                            data = Uri.parse("package:${ctx.packageName}")
+                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        }
+                        ctx.startActivity(intent)
+                    } catch (e: Exception) {
+                        Timber.e(e, "Cannot open app permission settings")
+                    }
+                }
+            ),
+            PermissionStatus(
                 title = "Display Over Other Apps (Overlay)",
                 description = "Permits workflow HUD and floating status controls to draw over other apps",
                 isGranted = isOverlayGranted(context),
