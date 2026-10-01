@@ -123,4 +123,17 @@ class TelephonyPoolRepository {
         val active = getActiveSlot() ?: return "All slots exhausted"
         return "Slot ${active.slotIndex}/3: ${active.phoneNumber} (${active.accountsCreated}/3 used)"
     }
+
+    /**
+     * Updates a specific slot's phone number with a real user-specified number.
+     */
+    fun setSlotPhoneNumber(slotIndex: Int, newPhoneNumber: String) {
+        val currentList = _slots.value.toMutableList()
+        val index = currentList.indexOfFirst { it.slotIndex == slotIndex }
+        if (index != -1) {
+            currentList[index] = currentList[index].copy(phoneNumber = newPhoneNumber)
+            _slots.value = currentList
+            Timber.i("Telephony Slot #$slotIndex phone number updated to $newPhoneNumber")
+        }
+    }
 }

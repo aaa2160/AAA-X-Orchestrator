@@ -143,7 +143,7 @@ class MainActivity : ComponentActivity() {
                         NavTab.Settings -> SettingsScreen(
                             onTriggerKillSwitchTest = {
                                 engine.triggerEmergencyKillSwitch()
-                                Toast.makeText(this, "Simulated Kill Switch Abort (<1ms)", Toast.LENGTH_SHORT).show()
+                                Toast.makeText(this, "Emergency Kill Switch Activated (<1ms)", Toast.LENGTH_SHORT).show()
                             },
                             modifier = Modifier.padding(innerPadding)
                         )

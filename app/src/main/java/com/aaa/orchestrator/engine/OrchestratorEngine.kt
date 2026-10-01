@@ -183,11 +183,14 @@ class OrchestratorEngine(
 
         val username = customUsername ?: run {
             val twidMatch = Regex("twid=u%3D(\\d+)").find(cookieString)?.groupValues?.get(1)
-            if (twidMatch != null) "x_user_$twidMatch" else "user_" + (100000..999999).random()
+            val digits = _activePhoneNumber.value.filter { it.isDigit() }
+            if (twidMatch != null) "x_user_$twidMatch"
+            else if (digits.isNotEmpty()) "x_acc_${digits.takeLast(6)}"
+            else "x_account"
         }
 
         val password = _activePassword.value
-        val twoFactorSecret = customSecret ?: "JBSWY3DPEHPK3PXP"
+        val twoFactorSecret = customSecret ?: ""
         val phoneNumber = _activePhoneNumber.value
 
         val record = AccountRecord(
@@ -227,5 +230,28 @@ class OrchestratorEngine(
         _latestOtp.value = null
 
         return@withContext Result.success(record.copy(id = savedId))
+    }
+
+    /**
+     * Allows the user to specify their real 2nr phone number.
+     */
+    fun updateActivePhoneNumber(newPhone: String) {
+        _activePhoneNumber.value = newPhone
+        telephonyRepo.setSlotPhoneNumber(telephonyRepo.getActiveSlot().slotIndex, newPhone)
+        _metrics.value = _metrics.value.copy(currentSlotInfo = telephonyRepo.getSlotSummary())
+        Timber.i("Active phone number manually set to: $newPhone")
+    }
+
+    /**
+     * Allows the user to specify a custom password or regenerate one.
+     */
+    fun updateActivePassword(newPass: String) {
+        _activePassword.value = newPass
+    }
+
+    fun regeneratePassword(): String {
+        val newPass = PasswordSynthesizer.generatePassword()
+        _activePassword.value = newPass
+        return newPass
     }
 }

@@ -214,14 +214,15 @@ fun AccountVaultCard(
                 }
 
                 Row(verticalAlignment = Alignment.CenterVertically) {
+                    val has2fa = account.twoFactorSecret.isNotBlank()
                     Surface(
                         shape = RoundedCornerShape(8.dp),
-                        color = SoftGreenTile
+                        color = if (has2fa) SoftGreenTile else SurfaceVariantLight
                     ) {
                         Text(
-                            text = "2FA ACTIVE",
+                            text = if (has2fa) "2FA ACTIVE" else "SESSION ONLY",
                             style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                            color = SuccessGreen,
+                            color = if (has2fa) SuccessGreen else TextMuted,
                             modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
                         )
                     }
@@ -240,10 +241,11 @@ fun AccountVaultCard(
                 }
             }
 
-            Spacer(modifier = Modifier.height(12.dp))
-
-            // Live TOTP Ring
-            TotpRing(secret = account.twoFactorSecret)
+            if (account.twoFactorSecret.isNotBlank()) {
+                Spacer(modifier = Modifier.height(12.dp))
+                // Live TOTP Ring
+                TotpRing(secret = account.twoFactorSecret)
+            }
 
             Spacer(modifier = Modifier.height(12.dp))
 

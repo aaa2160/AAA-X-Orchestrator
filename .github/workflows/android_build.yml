@@ -43,15 +43,15 @@ jobs:
       if: github.ref == 'refs/heads/main'
       uses: softprops/action-gh-release@v1
       with:
-        tag_name: v1.2.0
-        name: "AAA X-Orchestrator v1.2.0"
+        tag_name: v1.3.0
+        name: "AAA X-Orchestrator v1.3.0"
         body: |
-          ### AAA X-Orchestrator Production Release v1.2.0 (Real Autonomous Engine)
-          - **100% Real Live Engine**: Eliminated all mock delays and fake simulated account loops.
-          - **Live WebView Integration**: Automation directly launches the real Browser to `https://x.com/i/flow/signup`.
-          - **Real Session Cookie Extraction**: Extracts real `auth_token` and `ct0` directly from the live `CookieManager` upon user signup/login.
-          - **Interactive Workflow HUD**: Floating controls in Browser with 1-tap "Fill Phone", 1-tap "Fill OTP" from real 2nr SMS notifications, and 1-tap "Capture Session".
-          - **Database Purge & Management**: Added single-account delete and "Clear All" with confirmation to wipe old mock records and start fresh with real accounts.
+          ### AAA X-Orchestrator Production Release v1.3.0 (Full Normal Browser & Zero-Simulation Engine)
+          - **Full Normal Modern Browser**: Added interactive Omnibox (address/search bar) with URL typing, Google search fallback, navigation toolbar (Back, Forward, Reload, Home), Desktop Mode toggle, WebChromeClient, and live progress bar.
+          - **Quick Bookmarks**: One-tap instant access to X.com, X Signup Flow, Google, DuckDuckGo, and 2nr Web.
+          - **Minimizable / Collapsible Workflow HUD**: Workflow tools can be collapsed with 1 tap, giving 100% screen space for normal web browsing.
+          - **Custom Phone Number Editing**: Users can now directly enter and edit their real Polish 2nr phone number in the HUD.
+          - **Eradicated All Mock / Simulated Remnants**: Removed dummy 2FA secrets, random fallback usernames, and simulation toasts. Accounts and sessions only exist from real user activity.
         files: |
           app/build/outputs/apk/debug/app-debug.apk
         draft: false

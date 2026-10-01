@@ -2,6 +2,25 @@
 
 All notable changes and architectural configurations for this project are documented here.
 
+## [1.3.0] - 2026-10-01
+
+### Added & Enhanced
+- **Full Normal Modern Browser (Omnibox & Web Controls)**:
+  - Replaced the static URL text with a fully interactive, editable address bar in [`BrowserScreen.kt`](file:///root/project/AAAX/app/src/main/java/com/aaa/orchestrator/ui/screens/BrowserScreen.kt). Users can type any URL (`x.com`, `google.com`, `wikipedia.org`) or any web search query with automatic Google search fallback.
+  - Implemented standard browser navigation toolbar: Back, Forward, Reload / Stop, Home, and Desktop Mode toggle (switching between mobile and desktop user agent).
+  - Added live page loading progress bar driven by `WebChromeClient.onProgressChanged`.
+  - Added quick bookmark chips: `𝕏 X.com`, `📝 X Signup`, `🔍 Google`, `🦆 DuckDuckGo`, `📞 2nr Web`.
+  - Integrated `WebChromeClient` with custom handlers for `onJsAlert` and `onJsConfirm` to prevent JavaScript dialogs from blocking the WebView.
+- **Minimizable & Collapsible Registration HUD**:
+  - The floating registration HUD is now collapsible with 1 tap. When browsing normally, users can collapse it to a slim chip, giving 100% of the screen for normal web browsing.
+- **Real Phone Number Customization**:
+  - Added an edit dialog in [`BrowserScreen.kt`](file:///root/project/AAAX/app/src/main/java/com/aaa/orchestrator/ui/screens/BrowserScreen.kt) allowing users to enter and edit their real Polish 2nr phone number.
+  - Added `updateActivePhoneNumber` in [`OrchestratorEngine.kt`](file:///root/project/AAAX/app/src/main/java/com/aaa/orchestrator/engine/OrchestratorEngine.kt) and `setSlotPhoneNumber` in [`TelephonyPoolRepository.kt`](file:///root/project/AAAX/app/src/main/java/com/aaa/orchestrator/data/repository/TelephonyPoolRepository.kt).
+- **Zero Simulation / Mock Remnants**:
+  - Removed dummy fallback `user_ + random()` and fake Base32 2FA secret from [`OrchestratorEngine.kt`](file:///root/project/AAAX/app/src/main/java/com/aaa/orchestrator/engine/OrchestratorEngine.kt). Accounts only record real 2FA if actually configured.
+  - Updated [`VaultScreen.kt`](file:///root/project/AAAX/app/src/main/java/com/aaa/orchestrator/ui/screens/VaultScreen.kt) to only render 2FA badges and TOTP countdown rings when a genuine secret exists.
+  - Removed "Simulated Kill Switch Abort" toast in [`MainActivity.kt`](file:///root/project/AAAX/app/src/main/java/com/aaa/orchestrator/MainActivity.kt).
+
 ## [1.2.0] - 2026-10-01
 
 ### Changed & Fixed
