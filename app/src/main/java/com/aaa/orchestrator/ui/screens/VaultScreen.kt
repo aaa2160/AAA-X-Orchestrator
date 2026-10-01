@@ -458,6 +458,9 @@ private fun exportAndShareAccounts(context: Context, accounts: List<AccountRecor
         if (!targetDir.exists()) targetDir.mkdirs()
         val exportFile = File(targetDir, "accounts_export.txt")
         exportFile.writeText(sb.toString())
+        context.sendBroadcast(
+            Intent(Intent.ACTION_MEDIA_SCANNER_SCAN_FILE, android.net.Uri.fromFile(exportFile))
+        )
         Toast.makeText(context, "Exported to Download/AAAX/accounts_export.txt", Toast.LENGTH_SHORT).show()
     } catch (e: Exception) {
         // Fallback to internal storage or direct share

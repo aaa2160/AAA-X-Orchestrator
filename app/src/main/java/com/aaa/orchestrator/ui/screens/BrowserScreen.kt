@@ -88,7 +88,7 @@ fun BrowserScreen(
     var showTabSwitcher by remember { mutableStateOf(false) }
 
     // Navigation & Web State
-    val initialTab = BrowserTabManager.getCurrentTab(isAutomationMode) ?: tabs[0]
+    val initialTab = BrowserTabManager.getCurrentTab(isAutomationMode) ?: tabs.firstOrNull() ?: BrowserTab(url = activeUrl, title = if (isAutomationMode) "X Signup Bot" else "Google")
     var currentUrl by remember(isAutomationMode) { mutableStateOf(initialTab.url) }
     var inputUrl by remember(isAutomationMode) { mutableStateOf(initialTab.url) }
     var pageTitle by remember(isAutomationMode) { mutableStateOf(initialTab.title) }
@@ -922,33 +922,61 @@ fun BrowserScreen(
         }
     }
 
+    fun getOrCreateWebView(tab: BrowserTab): WebView {
+        val existing = webViewPool[tab.id]
+        if (existing != null) {
+            return existing
+        }
+        val created = createConfiguredWebView(context, tab)
+        webViewPool[tab.id] = created
+        containerLayout?.let { layout ->
+            if (created.parent != layout) {
+                (created.parent as? ViewGroup)?.removeView(created)
+                layout.addView(created)
+            }
+        }
+        return created
+    }
+
     // Function to switch active tab WITHOUT reloading page state
     fun switchTab(newIndex: Int) {
-        BrowserTabManager.switchTab(isAutomationMode, newIndex)
-        val current = BrowserTabManager.getCurrentTab(isAutomationMode)
-        val active = if (current != null) webViewPool[current.id] else null
-        if (active != null) {
-            activeWebView = active
-            currentUrl = active.url ?: tabs.getOrNull(newIndex)?.url ?: ""
-            inputUrl = currentUrl
-            pageTitle = active.title ?: tabs.getOrNull(newIndex)?.title ?: "New Tab"
-            canGoBack = active.canGoBack()
-            canGoForward = active.canGoForward()
-            isLoading = false
+        if (newIndex !in tabs.indices) return
+        val oldTab = BrowserTabManager.getCurrentTab(isAutomationMode)
+        oldTab?.let {
+            webViewPool[it.id]?.visibility = View.INVISIBLE
         }
+
+        BrowserTabManager.switchTab(isAutomationMode, newIndex)
+        val targetTab = tabs[newIndex]
+        val active = getOrCreateWebView(targetTab)
+        active.visibility = View.VISIBLE
+        active.bringToFront()
+        activeWebView = active
+        currentUrl = active.url ?: targetTab.url
+        inputUrl = currentUrl
+        pageTitle = active.title ?: targetTab.title
+        canGoBack = active.canGoBack()
+        canGoForward = active.canGoForward()
+        isLoading = false
     }
 
     // Function to add a new tab
     fun addNewTab(url: String = if (isAutomationMode) "https://x.com/i/flow/signup" else "https://www.google.com") {
         BrowserTabManager.addNewTab(isAutomationMode, url)
-        switchTab(tabs.size - 1)
+        val newIndex = tabs.size - 1
+        if (newIndex in tabs.indices) {
+            val newTab = tabs[newIndex]
+            getOrCreateWebView(newTab)
+            switchTab(newIndex)
+        }
         showTabSwitcher = false
     }
 
     // Function to close a tab
     fun closeTab(index: Int) {
         BrowserTabManager.closeTab(isAutomationMode, index)
-        switchTab(BrowserTabManager.getActiveIndex(isAutomationMode).value)
+        val activeIdx = BrowserTabManager.getActiveIndex(isAutomationMode).value
+        switchTab(activeIdx)
     }
 
     Column(
@@ -1236,7 +1264,7 @@ fun BrowserScreen(
                             leadingIcon = { Icon(Icons.Default.Add, contentDescription = null) },
                             onClick = {
                                 showMenu = false
-                                addNewTab("https://x.com/i/flow/signup")
+                                addNewTab()
                             }
                         )
                         DropdownMenuItem(
@@ -1683,17 +1711,13 @@ fun BrowserScreen(
                         // Initialize or reuse initial tab webview
                         val defaultTab = BrowserTab(url = if (isAutomationMode) "https://x.com/i/flow/signup" else "https://www.google.com")
                         val currentTab = BrowserTabManager.getCurrentTab(isAutomationMode) ?: tabs.firstOrNull() ?: defaultTab
-                        val existingWv = webViewPool[currentTab.id]
-                        val initialWebView = if (existingWv != null) {
-                            (existingWv.parent as? ViewGroup)?.removeView(existingWv)
-                            existingWv
-                        } else {
-                            val created = createConfiguredWebView(ctx, currentTab)
-                            webViewPool[currentTab.id] = created
-                            created
+                        val initialWebView = getOrCreateWebView(currentTab)
+                        if (initialWebView.parent != this) {
+                            (initialWebView.parent as? ViewGroup)?.removeView(initialWebView)
+                            addView(initialWebView)
                         }
-                        addView(initialWebView)
                         initialWebView.visibility = View.VISIBLE
+                        initialWebView.bringToFront()
                         activeWebView = initialWebView
                     }
                 },
@@ -1708,14 +1732,12 @@ fun BrowserScreen(
                     }
                     val defaultTab = BrowserTab(url = if (isAutomationMode) "https://x.com/i/flow/signup" else "https://www.google.com")
                     val currentTab = BrowserTabManager.getCurrentTab(isAutomationMode) ?: tabs.firstOrNull() ?: defaultTab
-                    val active = webViewPool[currentTab.id]
-                    if (active != null && active.visibility != View.VISIBLE) {
+                    val active = getOrCreateWebView(currentTab)
+                    if (active.visibility != View.VISIBLE) {
                         active.visibility = View.VISIBLE
                         active.bringToFront()
                     }
-                    if (active != null) {
-                        activeWebView = active
-                    }
+                    activeWebView = active
                 }
             )
 
@@ -1818,7 +1840,7 @@ fun BrowserScreen(
                     Text("Tabs (${tabs.size})", fontWeight = FontWeight.Bold, fontSize = 17.sp)
                     FilledTonalButton(
                         onClick = {
-                            addNewTab("https://x.com/i/flow/signup")
+                            addNewTab()
                         },
                         shape = RoundedCornerShape(8.dp),
                         contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),

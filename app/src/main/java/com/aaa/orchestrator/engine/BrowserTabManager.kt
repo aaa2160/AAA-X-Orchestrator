@@ -50,14 +50,25 @@ object BrowserTabManager {
         autoTabs.add(BrowserTab(url = "https://x.com/i/flow/signup", title = "X Signup Bot"))
     }
 
-    fun getTabs(isAutomation: Boolean) = if (isAutomation) autoTabs else normalTabs
+    fun getTabs(isAutomation: Boolean): androidx.compose.runtime.snapshots.SnapshotStateList<BrowserTab> {
+        val list = if (isAutomation) autoTabs else normalTabs
+        if (list.isEmpty()) {
+            list.add(
+                BrowserTab(
+                    url = if (isAutomation) "https://x.com/i/flow/signup" else "https://www.google.com",
+                    title = if (isAutomation) "X Signup Bot" else "Google"
+                )
+            )
+        }
+        return list
+    }
     fun getActiveIndex(isAutomation: Boolean) = if (isAutomation) autoActiveTabIndex else normalActiveTabIndex
     fun getPool(isAutomation: Boolean) = if (isAutomation) autoWebViewPool else normalWebViewPool
 
     fun getCurrentTab(isAutomation: Boolean): BrowserTab? {
         val tabs = getTabs(isAutomation)
         val idx = getActiveIndex(isAutomation).value
-        return tabs.getOrNull(idx)
+        return tabs.getOrNull(idx) ?: tabs.firstOrNull()
     }
 
     fun switchTab(isAutomation: Boolean, newIndex: Int) {
@@ -69,7 +80,9 @@ object BrowserTabManager {
             val oldTab = tabs.getOrNull(activeIdx.value)
             val newTab = tabs[newIndex]
 
-            oldTab?.let { pool[it.id]?.visibility = View.INVISIBLE }
+            if (oldTab?.id != newTab.id) {
+                oldTab?.let { pool[it.id]?.visibility = View.INVISIBLE }
+            }
 
             activeIdx.value = newIndex
             val newWv = pool[newTab.id]
@@ -92,9 +105,11 @@ object BrowserTabManager {
         val pool = getPool(isAutomation)
         val activeIdx = getActiveIndex(isAutomation)
 
+        if (index !in tabs.indices) return
+
         if (tabs.size <= 1) {
             val fallbackUrl = if (isAutomation) "https://x.com/i/flow/signup" else "https://www.google.com"
-            val tab = tabs[0]
+            val tab = tabs.firstOrNull() ?: return
             tab.url = fallbackUrl
             tab.title = if (isAutomation) "X Signup Bot" else "Google"
             pool[tab.id]?.loadUrl(fallbackUrl)

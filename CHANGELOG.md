@@ -2,6 +2,21 @@
 
 All notable changes and architectural configurations for this project are documented here.
 
+## [2.5.1] - 2026-10-01
+
+### Fixed & Multi-Tab Stability
+- **Multi-Tab WebView Lifecycle Architecture ([`BrowserScreen.kt`](file:///root/project/AAAX/app/src/main/java/com/aaa/orchestrator/ui/screens/BrowserScreen.kt), [`BrowserTabManager.kt`](file:///root/project/AAAX/app/src/main/java/com/aaa/orchestrator/engine/BrowserTabManager.kt))**:
+  - Implemented `getOrCreateWebView(tab)` in `BrowserScreen.kt` ensuring newly opened tabs dynamically create and attach their dedicated WebView instances to the container layout.
+  - Eliminated tab switching freezes and blank screens caused by missing WebView references.
+  - Fixed hardcoded URLs in `addNewTab()` inside the Chrome overflow dropdown menu and Tab Switcher modal, ensuring Normal Browser creates clean `https://www.google.com` tabs while Automation Browser creates `https://x.com/i/flow/signup` tabs.
+  - Added strict bounds checking and defensive fallback handling across `getTabs()`, `getCurrentTab()`, `switchTab()`, and `closeTab()` to prevent `IndexOutOfBoundsException`.
+
+### Improved & UX Polish
+- **1-Tap Clipboard Auto-Population ([`DashboardScreen.kt`](file:///root/project/AAAX/app/src/main/java/com/aaa/orchestrator/ui/screens/DashboardScreen.kt))**:
+  - Tapping "Paste" on the Cloud Telephony card now immediately detects and auto-fills any phone number currently in the Android clipboard into the input field.
+- **Instant Media Scanning for Account Exports ([`VaultScreen.kt`](file:///root/project/AAAX/app/src/main/java/com/aaa/orchestrator/ui/screens/VaultScreen.kt))**:
+  - Exported credential files (`accounts_export.txt`) in `/storage/emulated/0/Download/AAAX/` now automatically dispatch a MediaScanner scan broadcast so file managers and external tools index the file immediately.
+
 ## [2.5.0] - 2026-10-01
 
 ### Fixed & Architectural Transparency

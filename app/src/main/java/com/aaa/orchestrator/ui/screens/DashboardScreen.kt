@@ -347,6 +347,11 @@ fun DashboardScreen(
 
                     FilledTonalButton(
                         onClick = {
+                            val clipMgr = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
+                            val clip = clipMgr?.primaryClip?.getItemAt(0)?.text?.toString()?.trim()
+                            if (!clip.isNullOrBlank()) {
+                                phoneInput = clip
+                            }
                             showSetPhoneDialog = true
                         },
                         shape = RoundedCornerShape(8.dp),
