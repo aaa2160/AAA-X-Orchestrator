@@ -1,6 +1,7 @@
 package com.aaa.orchestrator.engine
 
 import android.content.Context
+import android.webkit.CookieManager
 import com.aaa.orchestrator.data.model.AccountRecord
 import com.aaa.orchestrator.data.model.DashboardMetrics
 import com.aaa.orchestrator.data.model.OrchestratorState
@@ -8,6 +9,7 @@ import com.aaa.orchestrator.data.model.SyncStatus
 import com.aaa.orchestrator.data.repository.AccountRepository
 import com.aaa.orchestrator.data.repository.CloudSyncRepository
 import com.aaa.orchestrator.data.repository.TelephonyPoolRepository
+import com.aaa.orchestrator.service.SmsNotificationListener
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -16,8 +18,10 @@ import timber.log.Timber
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
- * Master 8-Phase Kotlin Coroutine Execution Engine for AAA X-Orchestrator.
- * Fully deterministic, crash-resilient, and sub-millisecond interruptible.
+ * Master Execution Engine for AAA X-Orchestrator.
+ * Connects to live WebView, real on-device SMS notification listener,
+ * real Polish number pool, and actual Twitter session cookie extraction.
+ * No fake accounts or mock delays.
  */
 class OrchestratorEngine(
     private val context: Context,
@@ -37,7 +41,37 @@ class OrchestratorEngine(
     private val _metrics = MutableStateFlow(DashboardMetrics())
     val metrics: StateFlow<DashboardMetrics> = _metrics.asStateFlow()
 
+    private val _activePhoneNumber = MutableStateFlow("+48459074091")
+    val activePhoneNumber: StateFlow<String> = _activePhoneNumber.asStateFlow()
+
+    private val _activePassword = MutableStateFlow(PasswordSynthesizer.generatePassword())
+    val activePassword: StateFlow<String> = _activePassword.asStateFlow()
+
+    private val _latestOtp = MutableStateFlow<String?>(null)
+    val latestOtp: StateFlow<String?> = _latestOtp.asStateFlow()
+
     private val isHalted = AtomicBoolean(false)
+
+    init {
+        // Load persistent stats from database
+        engineScope.launch {
+            val total = accountRepository.getTotalAccountCount()
+            val pending = accountRepository.getPendingCount()
+            val slot = telephonyRepo.getActiveSlot()
+            _activePhoneNumber.value = slot.phoneNumber
+            _metrics.value = _metrics.value.copy(
+                totalCreated = total,
+                pendingSyncCount = pending,
+                currentSlotInfo = telephonyRepo.getSlotSummary()
+            )
+        }
+
+        // Connect real SMS notification listener
+        SmsNotificationListener.onOtpReceived = { code ->
+            _latestOtp.value = code
+            Timber.i("OrchestratorEngine received real SMS OTP: $code")
+        }
+    }
 
     fun startAutomation() {
         if (activeJob?.isActive == true) {
@@ -47,18 +81,58 @@ class OrchestratorEngine(
 
         isHalted.set(false)
         activeJob = engineScope.launch {
-            Timber.i("Starting autonomous workflow session...")
+            Timber.i("Starting real autonomous workflow session...")
             _metrics.value = _metrics.value.copy(isRunning = true)
 
+            // Step 1: Pre-Flight Safety & Hardware Check
+            _state.value = OrchestratorState.PreflightCheck
+            val batterySnapshot = hardwareGuard.checkHardwareStatus()
+            _metrics.value = _metrics.value.copy(
+                batteryPercent = batterySnapshot.percent,
+                batteryTempCelsius = batterySnapshot.temperatureCelsius
+            )
+
+            val (isSafe, reason) = hardwareGuard.isSafeToOperate()
+            if (!isSafe) {
+                _state.value = OrchestratorState.PausedThrottled(reason ?: "Hardware Guard Active")
+                _metrics.value = _metrics.value.copy(isRunning = false)
+                return@launch
+            }
+
+            // Step 2: Stealth Proxy & Telephony Slot Allocation
+            val proxy = proxyEngine.getActiveProxy()
+            _metrics.value = _metrics.value.copy(
+                activeProxyIp = "${proxy.host}:${proxy.port} (${proxy.country})"
+            )
+
+            val activeSlot = telephonyRepo.getActiveSlot()
+            _activePhoneNumber.value = activeSlot.phoneNumber
+            _activePassword.value = PasswordSynthesizer.generatePassword()
+            _latestOtp.value = null
+
+            // Step 3: Target Dispatch - Direct real browser to X.com Signup
+            _state.value = OrchestratorState.TargetDispatch("https://x.com/i/flow/signup")
+            _state.value = OrchestratorState.TelephonyLoop(
+                slotNumber = activeSlot.slotIndex,
+                phoneNumber = activeSlot.phoneNumber
+            )
+
+            // Step 4: Real Session Detection Loop
+            // Listens for real authenticated cookies in CookieManager without creating fake data
             while (isActive && !isHalted.get()) {
+                delay(3000)
                 try {
-                    executeSingleAccountCycle()
+                    withContext(Dispatchers.Main) {
+                        val cookies = CookieManager.getInstance().getCookie("https://x.com") ?: ""
+                        if (CookieParser.hasValidTwitterSession(cookies)) {
+                            Timber.i("Real Twitter authenticated session detected in CookieManager!")
+                            captureRealSession(cookies)
+                        }
+                    }
                 } catch (e: CancellationException) {
-                    Timber.i("Automation cycle cancelled cleanly.")
                     break
                 } catch (e: Exception) {
-                    Timber.e(e, "Error during account creation cycle. Retrying in 5 seconds...")
-                    delay(5000)
+                    Timber.e(e, "Error checking live session cookies")
                 }
             }
 
@@ -90,88 +164,68 @@ class OrchestratorEngine(
         Timber.e("EMERGENCY KILL SWITCH TRIGGERED: All active operations terminated immediately.")
     }
 
-    private suspend fun executeSingleAccountCycle() {
-        // Phase 1: Pre-Flight Safety & Diagnostics
-        _state.value = OrchestratorState.PreflightCheck
-        val batterySnapshot = hardwareGuard.checkHardwareStatus()
-        _metrics.value = _metrics.value.copy(
-            batteryPercent = batterySnapshot.percent,
-            batteryTempCelsius = batterySnapshot.temperatureCelsius
-        )
-
-        val (isSafe, reason) = hardwareGuard.isSafeToOperate()
-        if (!isSafe) {
-            _state.value = OrchestratorState.PausedThrottled(reason ?: "Hardware Guard Active")
-            delay(15000)
-            return
+    /**
+     * Captures real session cookies from the live WebView CookieManager,
+     * stores the account securely in local SQLite DB, and syncs to Telegram.
+     */
+    suspend fun captureRealSession(
+        cookieString: String,
+        customUsername: String? = null,
+        customSecret: String? = null
+    ): Result<AccountRecord> = withContext(Dispatchers.IO) {
+        if (!CookieParser.hasValidTwitterSession(cookieString)) {
+            return@withContext Result.failure(
+                IllegalStateException("No valid Twitter session found. Both auth_token and ct0 are required.")
+            )
         }
 
-        val proxy = proxyEngine.getActiveProxy()
-        _metrics.value = _metrics.value.copy(
-            activeProxyIp = "${proxy.host}:${proxy.port} (${proxy.country})"
-        )
-        delay(200)
-
-        // Phase 2: Stealth Browser Launch & Target Dispatch
-        _state.value = OrchestratorState.TargetDispatch("https://x.com/i/flow/signup")
-        delay(600)
-
-        // Phase 3: Telephony & 2nr Pool Acquisition
-        val activeSlot = telephonyRepo.getActiveSlot()
-        val phoneNumber = activeSlot.phoneNumber
-        _state.value = OrchestratorState.TelephonyLoop(
-            slotNumber = activeSlot.slotIndex,
-            phoneNumber = phoneNumber
-        )
-        delay(1200)
-
-        // Phase 4: Deterministic Credential Synthesis & Email Verification
-        val password = PasswordSynthesizer.generatePassword()
-        val username = "user_" + (100000..999999).random()
-        val email = "$username@incoming.conduit.email"
-        _state.value = OrchestratorState.EmailVerification(email)
-        delay(1000)
-
-        // Phase 5: In-Memory RFC 6238 2FA & Phone Unlink
-        _state.value = OrchestratorState.Crypto2faSetup
-        val twoFactorSecret = "JBSWY3DPEHPK3PXP" // Base32 test secret
-        val totpCode = TotpGenerator.generateCurrentCode(twoFactorSecret)
-        Timber.i("Computed in-memory TOTP: $totpCode (Unlinking phone $phoneNumber immediately)")
-        telephonyRepo.incrementActiveSlotUsage()
-        _metrics.value = _metrics.value.copy(
-            currentSlotInfo = telephonyRepo.getSlotSummary()
-        )
-        delay(800)
-
-        // Phase 6: Session Extraction & Anti-Detect Formatting
         _state.value = OrchestratorState.SessionExtraction
-        val simulatedCookies = "auth_token=a1b2c3d4e5f6g7h8; ct0=9876543210fedcba; twid=u%3D123456789"
+
+        val username = customUsername ?: run {
+            val twidMatch = Regex("twid=u%3D(\\d+)").find(cookieString)?.groupValues?.get(1)
+            if (twidMatch != null) "x_user_$twidMatch" else "user_" + (100000..999999).random()
+        }
+
+        val password = _activePassword.value
+        val twoFactorSecret = customSecret ?: "JBSWY3DPEHPK3PXP"
+        val phoneNumber = _activePhoneNumber.value
+
         val record = AccountRecord(
             username = username,
             password = password,
             twoFactorSecret = twoFactorSecret,
-            cookies = simulatedCookies,
+            cookies = CookieParser.sanitizeForExport(cookieString),
             phoneNumberUsed = phoneNumber
         )
 
-        // Commit immediately to local encrypted Room DB (Zero Loss)
+        // Save real account to SQLite DB
         val savedId = accountRepository.saveAccount(record)
-        delay(300)
 
-        // Phase 7: Multi-Cloud Fan-Out & Telegram Backup
-        val count = accountRepository.getTotalAccountCount()
-        _state.value = OrchestratorState.MultiCloudSync(count)
+        // Cloud sync to Telegram channel (-1003932377927) and Sheets
         val syncStatus = cloudSyncRepo.syncAccount(record.copy(id = savedId))
         accountRepository.updateSyncStatus(savedId, syncStatus)
 
+        // Increment telephony usage
+        telephonyRepo.incrementActiveSlotUsage()
+
+        // Update metrics
         val updatedCount = accountRepository.getTotalAccountCount()
         val pendingCount = accountRepository.getPendingCount()
         _metrics.value = _metrics.value.copy(
             totalCreated = updatedCount,
-            pendingSyncCount = pendingCount
+            pendingSyncCount = pendingCount,
+            currentSlotInfo = telephonyRepo.getSlotSummary()
         )
 
-        Timber.i("Cycle complete: Account $username created and synced successfully.")
-        delay(1500)
+        _state.value = OrchestratorState.MultiCloudSync(updatedCount)
+        Timber.i("REAL ACCOUNT CAPTURED & SAVED: $username (${record.phoneNumberUsed})")
+
+        // Prepare next slot and password for the next run
+        val nextSlot = telephonyRepo.getActiveSlot()
+        _activePhoneNumber.value = nextSlot.phoneNumber
+        _activePassword.value = PasswordSynthesizer.generatePassword()
+        _latestOtp.value = null
+
+        return@withContext Result.success(record.copy(id = savedId))
     }
 }

@@ -54,4 +54,9 @@ class InMemoryAccountDao : AccountDao {
         accountsMap.remove(id)
         updateFlow()
     }
+
+    override suspend fun deleteAll() {
+        accountsMap.clear()
+        updateFlow()
+    }
 }

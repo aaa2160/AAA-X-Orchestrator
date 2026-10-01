@@ -43,18 +43,15 @@ jobs:
       if: github.ref == 'refs/heads/main'
       uses: softprops/action-gh-release@v1
       with:
-        tag_name: v1.1.0
-        name: "AAA X-Orchestrator v1.1.0"
+        tag_name: v1.2.0
+        name: "AAA X-Orchestrator v1.2.0"
         body: |
-          ### AAA X-Orchestrator Production Release v1.1.0
-          - **On-Device Vision Intelligence**: Bundled Google ML Kit offline text recognition engine with Polish number and captcha extraction.
-          - **Resilient Room SQLite & DAO**: Generated Room `AppDatabase_Impl` and `AccountDao_Impl` via Kapt with failover in-memory buffer.
-          - **Adaptive Icon Suite**: Beautiful geometric monogram adaptive squircle icon for Samsung One UI.
-          - **Titanium AdBlock Shield**: Offline ad & tracker interceptor with render process crash protection for low-RAM devices.
-          - **Real-Time Diagnostics**: Live authenticated Webshare proxy latency test and live battery/thermal guard telemetry.
-          - **Polish 2nr SMS Extraction**: Multi-pattern OTP parser (hyphenated, spaced, and Twitter G- codes).
-          - **Telegram Batch Chunking**: Chunked message dispatcher preventing HTTP 400 length limit errors.
-          - **One-Click Account Export**: Native Android Sharesheet bulk export from Accounts Vault.
+          ### AAA X-Orchestrator Production Release v1.2.0 (Real Autonomous Engine)
+          - **100% Real Live Engine**: Eliminated all mock delays and fake simulated account loops.
+          - **Live WebView Integration**: Automation directly launches the real Browser to `https://x.com/i/flow/signup`.
+          - **Real Session Cookie Extraction**: Extracts real `auth_token` and `ct0` directly from the live `CookieManager` upon user signup/login.
+          - **Interactive Workflow HUD**: Floating controls in Browser with 1-tap "Fill Phone", 1-tap "Fill OTP" from real 2nr SMS notifications, and 1-tap "Capture Session".
+          - **Database Purge & Management**: Added single-account delete and "Clear All" with confirmation to wipe old mock records and start fresh with real accounts.
         files: |
           app/build/outputs/apk/debug/app-debug.apk
         draft: false

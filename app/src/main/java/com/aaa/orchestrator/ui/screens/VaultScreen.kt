@@ -27,14 +27,42 @@ import com.aaa.orchestrator.ui.theme.*
 @Composable
 fun VaultScreen(
     accounts: List<AccountRecord>,
+    onDeleteAccount: (Long) -> Unit = {},
+    onClearAllAccounts: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
     var searchQuery by remember { mutableStateOf("") }
+    var showClearDialog by remember { mutableStateOf(false) }
 
     val filtered = remember(accounts, searchQuery) {
         if (searchQuery.isBlank()) accounts
         else accounts.filter { it.username.contains(searchQuery, ignoreCase = true) }
+    }
+
+    if (showClearDialog) {
+        AlertDialog(
+            onDismissRequest = { showClearDialog = false },
+            title = { Text("Clear All Accounts?") },
+            text = { Text("This will permanently delete all ${accounts.size} account records from local storage. Real sessions should be exported first.") },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showClearDialog = false
+                        onClearAllAccounts()
+                        Toast.makeText(context, "All accounts cleared", Toast.LENGTH_SHORT).show()
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = ErrorRed)
+                ) {
+                    Text("Delete All")
+                }
+            },
+            dismissButton = {
+                OutlinedButton(onClick = { showClearDialog = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
     }
 
     Column(
@@ -62,25 +90,39 @@ fun VaultScreen(
             }
 
             if (accounts.isNotEmpty()) {
-                FilledTonalButton(
-                    onClick = { shareAllAccounts(context, accounts) },
-                    shape = RoundedCornerShape(10.dp),
-                    colors = ButtonDefaults.filledTonalButtonColors(containerColor = SoftBlueTile),
-                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Share,
-                        contentDescription = "Export All",
-                        tint = PrimaryBlue,
-                        modifier = Modifier.size(16.dp)
-                    )
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text(
-                        text = "Export All",
-                        color = PrimaryBlue,
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Bold
-                    )
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    FilledTonalButton(
+                        onClick = { shareAllAccounts(context, accounts) },
+                        shape = RoundedCornerShape(10.dp),
+                        colors = ButtonDefaults.filledTonalButtonColors(containerColor = SoftBlueTile),
+                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Share,
+                            contentDescription = "Export All",
+                            tint = PrimaryBlue,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = "Export",
+                            color = PrimaryBlue,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+
+                    IconButton(
+                        onClick = { showClearDialog = true },
+                        modifier = Modifier.size(36.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.DeleteSweep,
+                            contentDescription = "Clear All",
+                            tint = TextMuted,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
                 }
             }
         }
@@ -124,11 +166,14 @@ fun VaultScreen(
                 modifier = Modifier.weight(1f),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                items(filtered) { account ->
+                items(filtered, key = { it.id }) { account ->
                     AccountVaultCard(
                         account = account,
                         onCopyText = { label, text ->
                             copyToClipboard(context, label, text)
+                        },
+                        onDelete = {
+                            if (account.id > 0) onDeleteAccount(account.id)
                         }
                     )
                 }
@@ -140,7 +185,8 @@ fun VaultScreen(
 @Composable
 fun AccountVaultCard(
     account: AccountRecord,
-    onCopyText: (String, String) -> Unit
+    onCopyText: (String, String) -> Unit,
+    onDelete: () -> Unit = {}
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -154,29 +200,43 @@ fun AccountVaultCard(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Column {
+                Column(modifier = Modifier.weight(1f)) {
                     Text(
                         text = account.username,
                         style = MaterialTheme.typography.titleMedium,
                         color = TextSlateDark
                     )
                     Text(
-                        text = "Phone: ${account.phoneNumberUsed} • Password: ${account.password}",
+                        text = "Phone: ${account.phoneNumberUsed} • Pass: ${account.password}",
                         style = MaterialTheme.typography.bodyMedium,
                         color = TextMuted
                     )
                 }
 
-                Surface(
-                    shape = RoundedCornerShape(8.dp),
-                    color = SoftGreenTile
-                ) {
-                    Text(
-                        text = "2FA ACTIVE",
-                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                        color = SuccessGreen,
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                    )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = SoftGreenTile
+                    ) {
+                        Text(
+                            text = "2FA ACTIVE",
+                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                            color = SuccessGreen,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                        )
+                    }
+
+                    IconButton(
+                        onClick = onDelete,
+                        modifier = Modifier.size(28.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.DeleteOutline,
+                            contentDescription = "Delete",
+                            tint = TextMuted,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
                 }
             }
 

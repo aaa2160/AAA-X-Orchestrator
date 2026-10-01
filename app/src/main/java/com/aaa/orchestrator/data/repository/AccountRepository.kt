@@ -39,4 +39,12 @@ class AccountRepository(private val accountDao: AccountDao) {
     suspend fun getPendingCount(): Int {
         return accountDao.getPendingCount()
     }
+
+    suspend fun deleteAccountById(id: Long) {
+        accountDao.deleteById(id)
+    }
+
+    suspend fun deleteAllAccounts() {
+        accountDao.deleteAll()
+    }
 }

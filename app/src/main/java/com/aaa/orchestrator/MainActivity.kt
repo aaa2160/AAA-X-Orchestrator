@@ -16,6 +16,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import com.aaa.orchestrator.data.repository.AccountRepository
 import com.aaa.orchestrator.engine.OrchestratorEngine
+import kotlinx.coroutines.launch
 import com.aaa.orchestrator.service.OrchestratorAccessibilityService
 import com.aaa.orchestrator.service.OrchestratorForegroundService
 import com.aaa.orchestrator.ui.screens.BrowserScreen
@@ -68,6 +69,7 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             AAAXTheme {
+                val scope = rememberCoroutineScope()
                 val state by engine.state.collectAsState()
                 val metrics by engine.metrics.collectAsState()
                 val accounts by accountRepo.allAccounts.collectAsState(initial = emptyList())
@@ -115,6 +117,7 @@ class MainActivity : ComponentActivity() {
                                 OrchestratorAccessibilityService.isAutomationRunning.set(true)
                                 OrchestratorForegroundService.start(this, "Autonomous Workflow Running")
                                 engine.startAutomation()
+                                selectedTab = NavTab.Browser
                             },
                             onStopClick = {
                                 OrchestratorAccessibilityService.isAutomationRunning.set(false)
@@ -125,9 +128,16 @@ class MainActivity : ComponentActivity() {
                         )
                         NavTab.Vault -> VaultScreen(
                             accounts = accounts,
+                            onDeleteAccount = { id ->
+                                scope.launch { accountRepo.deleteAccountById(id) }
+                            },
+                            onClearAllAccounts = {
+                                scope.launch { accountRepo.deleteAllAccounts() }
+                            },
                             modifier = Modifier.padding(innerPadding)
                         )
                         NavTab.Browser -> BrowserScreen(
+                            engine = engine,
                             modifier = Modifier.padding(innerPadding)
                         )
                         NavTab.Settings -> SettingsScreen(
