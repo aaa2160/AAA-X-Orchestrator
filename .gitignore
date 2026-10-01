@@ -10,3 +10,5 @@ service-account.json
 *.session
 *.session-journal
 login_state.json
+__pycache__/
+video_thumb.jpg

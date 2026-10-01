@@ -66,11 +66,37 @@ def post_otp(payload: OtpPayload):
     latest_otp_timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
     return {"status": "ok", "latest_otp": latest_otp}
 
+@app.get("/api/phone")
+def get_phone():
+    return {"status": "ok", "active_phone": active_phone_number}
+
 @app.post("/api/phone")
 def set_phone(payload: PhonePayload):
     global active_phone_number
     active_phone_number = payload.phoneNumber
     return {"status": "ok", "active_phone": active_phone_number}
+
+phone_request_pending = False
+
+@app.post("/api/phone/request")
+def trigger_phone_request():
+    global phone_request_pending
+    phone_request_pending = True
+    return {"status": "queued", "message": "Phone number renewal requested from Telegram bot"}
+
+@app.get("/api/phone/request")
+def check_phone_request():
+    global phone_request_pending
+    needed = phone_request_pending
+    phone_request_pending = False
+    return {"request_new": needed}
+
+@app.post("/api/otp/clear")
+def clear_otp():
+    global latest_otp, latest_otp_timestamp
+    latest_otp = None
+    latest_otp_timestamp = None
+    return {"status": "cleared"}
 
 @app.post("/api/webhook/telegram")
 async def telegram_webhook(request: Request):

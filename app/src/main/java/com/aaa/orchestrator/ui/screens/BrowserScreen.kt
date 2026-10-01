@@ -559,7 +559,11 @@ fun BrowserScreen(
 
                         // 1-Tap Telegram @EHR_QUICKINCOME_BOT Auto-Fetch Launcher
                         FilledTonalButton(
-                            onClick = { AppLauncher.openTelegramBot(context, "EHR_QUICKINCOME_BOT", launchOverlay = true) },
+                            onClick = {
+                                engine?.requestNewPhoneNumberFromTelegramBot()
+                                Toast.makeText(context, "Requesting fresh number from Telegram bot...", Toast.LENGTH_SHORT).show()
+                                AppLauncher.openTelegramBot(context, "EHR_QUICKINCOME_BOT", launchOverlay = true)
+                            },
                             shape = RoundedCornerShape(8.dp),
                             colors = ButtonDefaults.filledTonalButtonColors(containerColor = SoftBlueTile),
                             contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
@@ -618,10 +622,6 @@ fun BrowserScreen(
                                                 Toast.LENGTH_LONG
                                             ).show()
                                         }
-                                    }
-                                } else {
-                                    Toast.makeText(context, "Engine not connected", Toast.LENGTH_SHORT).show()
-                                }
                                     }
                                 } else {
                                     Toast.makeText(context, "Engine not connected", Toast.LENGTH_SHORT).show()

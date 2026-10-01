@@ -47,9 +47,13 @@ def sync_to_cloud(endpoint_path: str, data: dict):
     except Exception as e:
         print(f"[!] Cloud Sync Warning ({endpoint_path}): {e}")
 
+last_phone_time = 0.0
+is_requesting = False
+
 @client.on(events.NewMessage(chats=TARGET_BOT))
 @client.on(events.MessageEdited(chats=TARGET_BOT))
 async def handle_bot_message(event):
+    global last_phone_time
     message_text = event.message.message or ""
     print(f"\n[+] Incoming from @{TARGET_BOT}:\n{message_text}")
 
@@ -62,8 +66,14 @@ async def handle_bot_message(event):
                 match = re.search(r"\+([0-9]{9,15})", btn_text)
                 if match:
                     phone_found = match.group(0)
+                    last_phone_time = time.time()
                     print(f"[PHONE] Phone Number Detected in Button: {phone_found}")
                     sync_to_cloud("/api/phone", {"phoneNumber": phone_found})
+
+    # Step 0: Check for Expired Session or Number
+    if "EXPIRED" in message_text.upper() or "SESSION CLOSED" in message_text.upper():
+        print("[*] Bot notice: Previous session closed. Ready for new number.")
+        return
 
     # Step 0: Check for Main Menu 'GET NUMBER'
     if "SELECT AN OPTION" in message_text.upper() or "WELCOME" in message_text.upper():
@@ -115,6 +125,11 @@ async def handle_bot_message(event):
 
 async def request_new_number():
     """Commands the bot to generate a new number."""
+    global is_requesting
+    if is_requesting:
+        print("[*] Number request already in progress, skipping duplicate.")
+        return
+    is_requesting = True
     print(f"[*] Triggering number request flow with @{TARGET_BOT}...")
     try:
         bot = await client.get_entity(TARGET_BOT)
@@ -133,6 +148,47 @@ async def request_new_number():
         await client.send_message(bot, "/start")
     except Exception as e:
         print(f"[!] Error requesting number: {e}")
+    finally:
+        await asyncio.sleep(4)
+        is_requesting = False
+
+async def poll_cloud_requests():
+    """Polls Render cloud every 3 seconds to trigger bot whenever app requests a fresh number."""
+    url = f"{CLOUD_ENDPOINT.rstrip('/')}/api/phone/request"
+    while True:
+        try:
+            req = urllib.request.Request(url, headers={"User-Agent": "AAA-X-Worker/1.9"})
+            with urllib.request.urlopen(req, timeout=5) as resp:
+                data = json.loads(resp.read().decode("utf-8"))
+                if data.get("request_new") is True:
+                    print("[*] Cloud signal received: New phone number requested by user/app!")
+                    await request_new_number()
+        except Exception:
+            pass
+        await asyncio.sleep(3)
+
+async def run_worker():
+    while True:
+        try:
+            if not client.is_connected():
+                await client.connect()
+            if not await client.is_user_authorized():
+                await client.start()
+
+            me = await client.get_me()
+            print(f"[OK] Logged in as: {me.first_name} (@{me.username or 'No Username'}, Phone: +{me.phone})")
+
+            # Start background cloud polling loop
+            asyncio.create_task(poll_cloud_requests())
+
+            # Start the automated number request flow
+            await request_new_number()
+
+            print("\n[*] Worker is listening in background for numbers & OTPs...")
+            await client.run_until_disconnected()
+        except Exception as e:
+            print(f"[!] Disconnected from Telegram ({e}). Auto-reconnecting in 5s...")
+            await asyncio.sleep(5)
 
 async def main():
     print("=" * 65)
@@ -141,15 +197,7 @@ async def main():
     print(f"[*] Cloud Target: {CLOUD_ENDPOINT}")
     print("=" * 65)
 
-    await client.start()
-    me = await client.get_me()
-    print(f"[OK] Logged in as: {me.first_name} (@{me.username or 'No Username'}, Phone: +{me.phone})")
-
-    # Start the automated number request flow
-    await request_new_number()
-
-    print("\n[*] Worker is listening in background for numbers & OTPs...")
-    await client.run_until_disconnected()
+    await run_worker()
 
 if __name__ == "__main__":
     asyncio.run(main())

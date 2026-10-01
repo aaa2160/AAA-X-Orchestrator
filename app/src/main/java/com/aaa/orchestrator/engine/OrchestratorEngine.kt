@@ -83,6 +83,44 @@ class OrchestratorEngine(
             _metrics.value = _metrics.value.copy(currentSlotInfo = telephonyRepo.getSlotSummary())
             Timber.i("OrchestratorEngine automatically configured active phone: $detectedPhone")
         }
+
+        // Poll Render Cloud for real phone number and inbound OTPs from Telegram worker
+        engineScope.launch {
+            while (isActive) {
+                try {
+                    // Check cloud phone number
+                    val cloudPhone = cloudSyncRepo.fetchCloudActivePhone()
+                    if (!cloudPhone.isNullOrBlank() && cloudPhone != _activePhoneNumber.value) {
+                        _activePhoneNumber.value = cloudPhone
+                        telephonyRepo.setSlotPhoneNumber(telephonyRepo.getActiveSlot().slotIndex, cloudPhone)
+                        _metrics.value = _metrics.value.copy(currentSlotInfo = telephonyRepo.getSlotSummary())
+                        Timber.i("Cloud phone synced to Orchestrator: $cloudPhone")
+                    }
+
+                    // Check cloud latest OTP
+                    val cloudOtp = cloudSyncRepo.fetchCloudLatestOtp()
+                    if (!cloudOtp.isNullOrBlank() && cloudOtp != _latestOtp.value) {
+                        _latestOtp.value = cloudOtp
+                        Timber.i("Cloud OTP intercepted and synced to Orchestrator: $cloudOtp")
+                    }
+                } catch (e: Exception) {
+                    // Silent background retry
+                }
+                delay(2500)
+            }
+        }
+    }
+
+    /**
+     * Signals the Telegram bot worker via Render cloud to rent a brand new phone number.
+     */
+    fun requestNewPhoneNumberFromTelegramBot() {
+        engineScope.launch {
+            val sent = cloudSyncRepo.requestNewPhoneFromBot()
+            if (sent) {
+                Timber.i("Requested new phone number from @EHR_QUICKINCOME_BOT via Render Cloud")
+            }
+        }
     }
 
     fun toggleProxyCountry(): String {
