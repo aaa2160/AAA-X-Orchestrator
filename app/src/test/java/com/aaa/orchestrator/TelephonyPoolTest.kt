@@ -18,7 +18,7 @@ class TelephonyPoolTest {
     fun testInitialPoolHasThreeSlots() {
         val slots = repo.slots.value
         assertEquals(3, slots.size)
-        assertEquals("+48459074091", slots[0].phoneNumber)
+        assertEquals("+2348091267977", slots[0].phoneNumber)
         assertEquals(0, slots[0].accountsCreated)
     }
 
@@ -47,10 +47,10 @@ class TelephonyPoolTest {
     @Test
     fun testGmailSessionQuotaReachedAtFiveNumbers() {
         // Initial setup has 3 numbers
-        val reached1 = repo.replaceExhaustedSlot(1, "+48459074094") // Total: 4
+        val reached1 = repo.replaceExhaustedSlot(1, "+2348091267980") // Total: 4
         assertFalse(reached1)
 
-        val reached2 = repo.replaceExhaustedSlot(2, "+48459074095") // Total: 5
+        val reached2 = repo.replaceExhaustedSlot(2, "+2348091267981") // Total: 5
         assertTrue("5 numbers reached, session limit triggered", reached2)
     }
 }

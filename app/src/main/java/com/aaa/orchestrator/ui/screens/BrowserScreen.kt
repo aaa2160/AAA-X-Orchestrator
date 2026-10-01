@@ -136,7 +136,7 @@ fun BrowserScreen(
 
     // Engine bindings
     val state by (engine?.state ?: remember { MutableStateFlow<OrchestratorState>(OrchestratorState.Idle) }).collectAsState()
-    val phoneNumber by (engine?.activePhoneNumber ?: remember { MutableStateFlow("+48459074091") }).collectAsState()
+    val phoneNumber by (engine?.activePhoneNumber ?: remember { MutableStateFlow("+2348091267977") }).collectAsState()
     val password by (engine?.activePassword ?: remember { MutableStateFlow("AAA_Auto_2026") }).collectAsState()
     val latestOtp by (engine?.latestOtp ?: remember { MutableStateFlow<String?>(null) }).collectAsState()
     val proxyCountry by (engine?.proxyCountry ?: remember { MutableStateFlow("DE") }).collectAsState()
@@ -480,7 +480,7 @@ fun BrowserScreen(
 
     // Helper to evaluate Twitter AutoPilot script on the active WebView
     fun runAutoPilotOnActiveTab() {
-        val targetPhone = if (phoneNumber.isNotBlank()) phoneNumber else "+48459074091"
+        val targetPhone = if (phoneNumber.isNotBlank()) phoneNumber else "+2348091267977"
         val script = TwitterAutoPilot.buildAutoPilotScript(
             name = currentProfileName.value,
             phone = targetPhone,
@@ -576,7 +576,7 @@ fun BrowserScreen(
                     if (isAutomationMode && newProgress >= 70) {
                         val currentWebUrl = view?.url ?: ""
                         if (currentWebUrl.contains("signup") || currentWebUrl.contains("flow") || currentWebUrl.contains("x.com")) {
-                            val targetPhone = if (phoneNumber.isNotBlank()) phoneNumber else "+48459074091"
+                            val targetPhone = if (phoneNumber.isNotBlank()) phoneNumber else "+2348091267977"
                             val script = TwitterAutoPilot.buildAutoPilotScript(
                                 name = currentProfileName.value,
                                 phone = targetPhone,
@@ -761,7 +761,7 @@ fun BrowserScreen(
 
                     // Inject Twitter AutoPilot ONLY if in automation mode on signup/flow/challenge
                     if (isAutomationMode && url != null && (url.contains("signup") || url.contains("flow") || url.contains("challenge") || url.contains("x.com"))) {
-                        val targetPhone = if (phoneNumber.isNotBlank()) phoneNumber else "+48459074091"
+                        val targetPhone = if (phoneNumber.isNotBlank()) phoneNumber else "+2348091267977"
                         val script = TwitterAutoPilot.buildAutoPilotScript(
                             name = currentProfileName.value,
                             phone = targetPhone,
@@ -1545,7 +1545,7 @@ fun BrowserScreen(
                             color = Color.White.copy(alpha = 0.25f)
                         ) {
                             Text(
-                                text = if (phoneNumber.isNotBlank()) phoneNumber else "+48459074091",
+                                text = if (phoneNumber.isNotBlank()) phoneNumber else "+2348091267977",
                                 fontSize = 10.sp,
                                 fontWeight = FontWeight.SemiBold,
                                 color = SurfaceWhite,
@@ -1712,7 +1712,7 @@ fun BrowserScreen(
                         value = phoneInputText,
                         onValueChange = { phoneInputText = it },
                         label = { Text("Phone Number") },
-                        placeholder = { Text("+48459074091") },
+                        placeholder = { Text("+2348091267977") },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth(),
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone)

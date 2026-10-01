@@ -1,16 +1,13 @@
 package com.aaa.orchestrator.data.model
 
 /**
- * Models a single virtual Polish (+48) telephony slot.
- * The workflow establishes:
- * 1. Cloud SIM holds up to 3 slots simultaneously.
- * 2. Each slot creates up to 3 Twitter accounts before being deleted.
- * 3. A single session supports multiple reservations before rotation.
+ * Models a Telegram Bot Telephony Number (@EHR_QUICKINCOME_BOT).
+ * Automatically populated from Telegram bot inline buttons and inbound messages.
  */
 data class TelephonySlot(
-    val slotIndex: Int, // 1, 2, or 3
-    val phoneNumber: String, // e.g. "+48459074092"
-    var accountsCreated: Int = 0, // Max 3
+    val slotIndex: Int = 1,
+    val phoneNumber: String, // e.g. "+2348091267977" from Telegram Bot
+    var accountsCreated: Int = 0,
     var isReserved: Boolean = true,
     val reservedAt: Long = System.currentTimeMillis()
 ) {
@@ -21,7 +18,7 @@ data class TelephonySlot(
         get() = (MAX_ACCOUNTS_PER_NUMBER - accountsCreated).coerceAtLeast(0)
 
     companion object {
-        const val MAX_ACCOUNTS_PER_NUMBER = 6 // Up to 6 OTPs per Polish number via Germany VPN/Proxy method
+        const val MAX_ACCOUNTS_PER_NUMBER = 6
         const val MAX_NUMBERS_PER_GMAIL_SESSION = 5
     }
 }

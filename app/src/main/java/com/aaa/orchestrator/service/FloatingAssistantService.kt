@@ -98,7 +98,7 @@ class FloatingAssistantService : Service() {
         }
 
         val badgeView = TextView(this).apply {
-            text = if (currentPhone.startsWith("+48")) "CLOUD SIM" else "TG BOT"
+            text = "TG BOT"
             textSize = 9f
             setTextColor(Color.WHITE)
             setPadding(dpToPx(5), dpToPx(2), dpToPx(5), dpToPx(2))
@@ -311,7 +311,7 @@ class FloatingAssistantService : Service() {
     private fun onPhoneChanged(phone: String) {
         phoneTextView?.post {
             phoneTextView?.text = phone
-            badgeTextView?.text = if (phone.startsWith("+48")) "CLOUD SIM" else "TG BOT"
+            badgeTextView?.text = "TG BOT"
         }
     }
 
@@ -343,7 +343,7 @@ class FloatingAssistantService : Service() {
 
     companion object {
         private var instance: FloatingAssistantService? = null
-        var currentPhone: String = "+48459074091"
+        var currentPhone: String = "+2348091267977"
             set(value) {
                 field = value
                 instance?.onPhoneChanged(value)

@@ -132,11 +132,11 @@ class OrchestratorAccessibilityService : AccessibilityService() {
     private fun findPhoneNumberInNode(node: android.view.accessibility.AccessibilityNodeInfo?): String? {
         if (node == null) return null
         val text = node.text?.toString() ?: ""
-        val phone = extractPolishPhone(text)
+        val phone = extractBotPhoneNumber(text)
         if (phone != null) return phone
 
         val desc = node.contentDescription?.toString() ?: ""
-        val phoneFromDesc = extractPolishPhone(desc)
+        val phoneFromDesc = extractBotPhoneNumber(desc)
         if (phoneFromDesc != null) return phoneFromDesc
 
         for (i in 0 until node.childCount) {
@@ -223,17 +223,7 @@ class OrchestratorAccessibilityService : AccessibilityService() {
         }
 
         fun extractPolishPhone(text: String): String? {
-            if (text.isBlank()) return null
-            val regex = Regex("(\\+48[\\s-]?)?([4-9]\\d{2}[\\s-]?\\d{3}[\\s-]?\\d{3})")
-            val match = regex.find(text) ?: return null
-            val rawDigits = match.value.filter { it.isDigit() }
-            return if (rawDigits.startsWith("48") && rawDigits.length == 11) {
-                "+$rawDigits"
-            } else if (rawDigits.length == 9) {
-                "+48$rawDigits"
-            } else if (rawDigits.length == 11) {
-                "+$rawDigits"
-            } else null
+            return extractBotPhoneNumber(text)
         }
     }
 }

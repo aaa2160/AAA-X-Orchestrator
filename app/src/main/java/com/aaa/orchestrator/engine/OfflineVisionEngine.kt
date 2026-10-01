@@ -44,9 +44,26 @@ object OfflineVisionEngine {
     }
 
     /**
-     * Extracts Polish (+48) phone numbers using offline regex matching.
+     * Extracts international phone numbers from OCR screen capture (Telegram bot buttons, messages).
+     */
+    fun extractInternationalPhoneNumber(ocrText: String): String? {
+        if (ocrText.isBlank()) return null
+        val match = Regex("\\+([0-9]{9,15})").find(ocrText)
+        if (match != null) return match.value
+
+        val regex = Regex("(\\+[0-9]{1,4}[\\s-]?)?([0-9]{3}[\\s-]?[0-9]{3}[\\s-]?[0-9]{3,4})")
+        val fallbackMatch = regex.find(ocrText)?.value ?: return null
+        val digits = fallbackMatch.replace(Regex("[^0-9]"), "")
+        return if (digits.length >= 10) "+$digits" else null
+    }
+
+    /**
+     * Legacy compatibility wrapper pointing to international Telegram Bot extractor.
      */
     fun extractPolishPhoneNumber(ocrText: String): String? {
+        val direct = extractInternationalPhoneNumber(ocrText)
+        if (direct != null) return direct
+
         val regex = Regex("(\\+48[\\s-]?[0-9]{3}[\\s-]?[0-9]{3}[\\s-]?[0-9]{3}|[0-9]{3}[\\s-]?[0-9]{3}[\\s-]?[0-9]{3})")
         val match = regex.find(ocrText)?.value ?: return null
         val digits = match.replace(Regex("[^0-9]"), "")

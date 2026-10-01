@@ -23,7 +23,7 @@ import kotlin.random.Random
  * - United States (US)
  * - Netherlands (NL)
  * - France (FR)
- * - Poland (PL): Align with +48 mobile prefixes
+ * - Poland (PL)
  * - Canada (CA)
  * - RANDOM: Dynamically cycles through all available regions
  */

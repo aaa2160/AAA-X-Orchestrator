@@ -41,7 +41,7 @@ class OrchestratorEngine(
     private val _metrics = MutableStateFlow(DashboardMetrics())
     val metrics: StateFlow<DashboardMetrics> = _metrics.asStateFlow()
 
-    private val _activePhoneNumber = MutableStateFlow("+48459074091")
+    private val _activePhoneNumber = MutableStateFlow("+2348091267977")
     val activePhoneNumber: StateFlow<String> = _activePhoneNumber.asStateFlow()
 
     private val _activePassword = MutableStateFlow(PasswordSynthesizer.generatePassword())

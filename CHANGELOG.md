@@ -19,6 +19,12 @@ All notable changes and architectural configurations for this project are docume
   - Added individual permission tracking and 1-tap settings redirects for Microphone and Storage Access in `PermissionManager`.
   - Refined WebChromeClient `onPermissionRequest` and Compose `cameraLauncher` in `BrowserScreen` to selectively inspect requested WebRTC resources (`RESOURCE_VIDEO_CAPTURE` and `RESOURCE_AUDIO_CAPTURE`), granting verified resources immediately and prompting only for missing permissions during KYC face verification.
   - Refined 5-tab Material 3 bottom navigation with persistent 11sp labels and pill indicator styling for mobile devices.
+- **Complete Eradication of Legacy 2nr & Full Telegram Bot Telephony Transition ([`TelephonyPoolRepository.kt`](file:///root/project/AAAX/app/src/main/java/com/aaa/orchestrator/data/repository/TelephonyPoolRepository.kt), [`TelephonySlot.kt`](file:///root/project/AAAX/app/src/main/java/com/aaa/orchestrator/data/model/TelephonySlot.kt), [`OfflineVisionEngine.kt`](file:///root/project/AAAX/app/src/main/java/com/aaa/orchestrator/engine/OfflineVisionEngine.kt), [`OrchestratorAccessibilityService.kt`](file:///root/project/AAAX/app/src/main/java/com/aaa/orchestrator/service/OrchestratorAccessibilityService.kt), [`FloatingAssistantService.kt`](file:///root/project/AAAX/app/src/main/java/com/aaa/orchestrator/service/FloatingAssistantService.kt), [`BrowserScreen.kt`](file:///root/project/AAAX/app/src/main/java/com/aaa/orchestrator/ui/screens/BrowserScreen.kt))**:
+  - Removed all remaining traces of the legacy Polish 2nr 3-slot virtual SIM provider (`+48459074091` hardcoded fallbacks, Polish-only OCR regexes, and synthetic number generation).
+  - Migrated entirely to the native **Telegram Bot Phone Number** architecture (`@EHR_QUICKINCOME_BOT`), supporting dynamic international phone formats (`+234...`, `+1...`, `+44...`).
+  - Updated `OfflineVisionEngine` to extract international numbers from on-screen Telegram bot messages and buttons.
+  - Updated `FloatingAssistantService` overlay badge to `TG BOT` and bound it to incoming Telegram bot numbers.
+  - Updated `TelephonyPoolRepository` slot summary to `TG Bot: <number> (<used>/6 used)`.
 
 ### Added & Multi-Cloud Expansion
 - **Turso libSQL Edge SQLite Integration ([`CloudIntegrationEngine.kt`](file:///root/project/AAAX/app/src/main/java/com/aaa/orchestrator/engine/CloudIntegrationEngine.kt), [`CloudSyncRepository.kt`](file:///root/project/AAAX/app/src/main/java/com/aaa/orchestrator/data/repository/CloudSyncRepository.kt))**:

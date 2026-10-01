@@ -24,6 +24,14 @@ class OfflineVisionEngineTest {
     }
 
     @Test
+    fun testExtractInternationalPhoneNumber() {
+        val ocrOutput = "Telegram Bot: +2348091267977 active for Twitter"
+        val phone = OfflineVisionEngine.extractInternationalPhoneNumber(ocrOutput)
+        assertNotNull(phone)
+        assertEquals("+2348091267977", phone)
+    }
+
+    @Test
     fun testExtractPolishPhoneNumberStartingWith48Prefix() {
         val ocrOutput = "Numer: 489-123-456 ważny"
         val phone = OfflineVisionEngine.extractPolishPhoneNumber(ocrOutput)
