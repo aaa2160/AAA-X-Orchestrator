@@ -21,6 +21,11 @@ All notable changes and architectural configurations for this project are docume
   - Added fallback handler to detect and click "Use phone instead" if Twitter defaults to email.
   - Added native prototype value setters with `InputEvent`, `change`, and keyboard event dispatches to guarantee React Native for Web form synchronization.
   - Added automatic confirmation for Twitter's "Verify phone" SMS dispatch dialog ("OK" / "Verify").
+- **Face Verification & KYC Camera Integration ([`AndroidManifest.xml`](file:///root/project/AAAX/app/src/main/AndroidManifest.xml), [`BrowserScreen.kt`](file:///root/project/AAAX/app/src/main/java/com/aaa/orchestrator/ui/screens/BrowserScreen.kt))**:
+  - Added `android.permission.CAMERA`, `RECORD_AUDIO`, `MODIFY_AUDIO_SETTINGS`, and camera hardware features to `AndroidManifest.xml`.
+  - Implemented `WebChromeClient.onPermissionRequest` granting WebRTC video/camera streams to Twitter/X security checks and face verification.
+  - Implemented `WebChromeClient.onShowFileChooser` enabling file/selfie photo uploads for KYC verification.
+  - Added runtime permission checks and launchers for seamless Android permission authorization.
 - **Hardware Back Navigation ([`BrowserScreen.kt`](file:///root/project/AAAX/app/src/main/java/com/aaa/orchestrator/ui/screens/BrowserScreen.kt))**:
   - Integrated `BackHandler(enabled = canGoBack)` intercepting Android device hardware and gesture back actions to navigate web history backward before leaving the browser tab.
 - **Pointer & Touch Events Synthetic Click ([`TwitterAutoPilot.kt`](file:///root/project/AAAX/app/src/main/java/com/aaa/orchestrator/engine/TwitterAutoPilot.kt))**:

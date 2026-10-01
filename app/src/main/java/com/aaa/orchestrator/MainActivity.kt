@@ -42,11 +42,18 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // Runtime Notification Permission for Android 13+ (API 33+)
+        // Runtime Permissions (Notifications & Camera for Face Verification)
+        val permsToRequest = mutableListOf<String>()
+        if (checkSelfPermission(android.Manifest.permission.CAMERA) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            permsToRequest.add(android.Manifest.permission.CAMERA)
+        }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             if (checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
-                requestPermissions(arrayOf(android.Manifest.permission.POST_NOTIFICATIONS), 101)
+                permsToRequest.add(android.Manifest.permission.POST_NOTIFICATIONS)
             }
+        }
+        if (permsToRequest.isNotEmpty()) {
+            requestPermissions(permsToRequest.toTypedArray(), 101)
         }
 
         val app = application as OrchestratorApp

@@ -14,6 +14,8 @@ import android.webkit.*
 import android.widget.FrameLayout
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -131,6 +133,37 @@ fun BrowserScreen(
     var activeWebView by remember { mutableStateOf<WebView?>(null) }
     val webViewPool = remember { mutableMapOf<String, WebView>() }
     var containerLayout by remember { mutableStateOf<FrameLayout?>(null) }
+
+    var pendingWebPermission by remember { mutableStateOf<PermissionRequest?>(null) }
+    var fileUploadCallback by remember { mutableStateOf<ValueCallback<Array<Uri>>?>(null) }
+
+    val cameraLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        if (isGranted) {
+            pendingWebPermission?.grant(pendingWebPermission?.resources)
+        } else {
+            pendingWebPermission?.deny()
+            Toast.makeText(context, "Camera permission needed for face verification", Toast.LENGTH_SHORT).show()
+        }
+        pendingWebPermission = null
+    }
+
+    val fileChooserLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        val uris = if (result.resultCode == android.app.Activity.RESULT_OK) {
+            val data = result.data
+            val clipData = data?.clipData
+            when {
+                clipData != null -> (0 until clipData.itemCount).map { clipData.getItemAt(it).uri }.toTypedArray()
+                data?.data != null -> arrayOf(data.data!!)
+                else -> null
+            }
+        } else null
+        fileUploadCallback?.onReceiveValue(uris)
+        fileUploadCallback = null
+    }
 
     // Chrome-Style Hardware Back Navigation: browse back before exiting tab
     BackHandler(enabled = canGoBack) {
@@ -305,6 +338,46 @@ fun BrowserScreen(
                 ) {
                     // Strict Location Privacy: Deny physical GPS / network location disclosure
                     callback?.invoke(origin, false, false)
+                }
+
+                override fun onPermissionRequest(request: PermissionRequest?) {
+                    // Enable camera & audio for Twitter / security identity check
+                    val reqResources = request?.resources ?: emptyArray()
+                    val activity = ctx as? android.app.Activity
+                    if (activity != null) {
+                        activity.runOnUiThread {
+                            if (ctx.checkSelfPermission(android.Manifest.permission.CAMERA) == android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                                request?.grant(reqResources)
+                            } else {
+                                pendingWebPermission = request
+                                cameraLauncher.launch(android.Manifest.permission.CAMERA)
+                            }
+                        }
+                    } else {
+                        request?.grant(reqResources)
+                    }
+                }
+
+                override fun onShowFileChooser(
+                    webView: WebView?,
+                    filePathCallback: ValueCallback<Array<Uri>>?,
+                    fileChooserParams: FileChooserParams?
+                ): Boolean {
+                    // Enable selfie/photo and document upload for verification
+                    fileUploadCallback?.onReceiveValue(null)
+                    fileUploadCallback = filePathCallback
+                    val intent = fileChooserParams?.createIntent() ?: Intent(Intent.ACTION_GET_CONTENT).apply {
+                        type = "image/*"
+                        addCategory(Intent.CATEGORY_OPENABLE)
+                    }
+                    return try {
+                        fileChooserLauncher.launch(intent)
+                        true
+                    } catch (e: Exception) {
+                        fileUploadCallback?.onReceiveValue(null)
+                        fileUploadCallback = null
+                        false
+                    }
                 }
 
                 override fun onJsAlert(view: WebView?, url: String?, message: String?, result: JsResult?): Boolean {
