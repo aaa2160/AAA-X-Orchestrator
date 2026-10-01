@@ -55,6 +55,7 @@ class TelephonyPoolRepository {
                 isReserved = true
             )
         } else {
+            totalNumbersInCurrentSession++
             currentList.add(
                 TelephonySlot(
                     slotIndex = slotIndex,
@@ -65,7 +66,9 @@ class TelephonyPoolRepository {
             )
         }
         _slots.value = currentList
-        activeSlotIndex = slotIndex
+        if (currentList.none { it.slotIndex == activeSlotIndex && !it.isExhausted }) {
+            activeSlotIndex = slotIndex
+        }
         Timber.i("Real Telegram Bot phone registered: $newPhoneNumber in slot #$slotIndex")
     }
 
