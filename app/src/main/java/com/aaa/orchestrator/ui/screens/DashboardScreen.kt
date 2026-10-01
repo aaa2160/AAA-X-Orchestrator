@@ -15,9 +15,14 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
+import android.content.Intent
+import android.net.Uri
+import android.widget.Toast
 import com.aaa.orchestrator.data.model.DashboardMetrics
 import com.aaa.orchestrator.data.model.OrchestratorState
-import com.aaa.orchestrator.engine.AppLauncher
 import com.aaa.orchestrator.ui.components.KillSwitchHud
 import com.aaa.orchestrator.ui.components.MetricCard
 import com.aaa.orchestrator.ui.theme.*
@@ -114,7 +119,7 @@ fun DashboardScreen(
             }
         }
 
-        // 2nr Telephony Pool Slot Card
+        // Cloud Telephony & Telegram Worker Card
         Card(
             modifier = Modifier
                 .fillMaxWidth()
@@ -134,21 +139,21 @@ fun DashboardScreen(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Icon(
-                        imageVector = Icons.Default.PhoneAndroid,
-                        contentDescription = "Telephony",
+                        imageVector = Icons.Default.CloudSync,
+                        contentDescription = "Cloud Telephony",
                         tint = PrimaryBlue,
                         modifier = Modifier.size(28.dp)
                     )
                     Spacer(modifier = Modifier.width(12.dp))
                     Column {
                         Text(
-                            text = "2nr Telephony Buffer (Poland +48)",
+                            text = "Cloud Telephony & Telegram Worker",
                             style = MaterialTheme.typography.labelSmall,
                             color = PrimaryBlue,
                             fontWeight = FontWeight.Bold
                         )
                         Text(
-                            text = metrics.currentSlotInfo,
+                            text = metrics.currentSlotInfo.replace("2nr", "Cloud"),
                             style = MaterialTheme.typography.titleMedium.copy(fontSize = 14.sp),
                             color = TextSlateDark
                         )
@@ -157,23 +162,35 @@ fun DashboardScreen(
 
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     FilledTonalButton(
-                        onClick = { AppLauncher.open2nrApp(context, launchOverlay = true) },
+                        onClick = {
+                            val botIntent = Intent(Intent.ACTION_VIEW, Uri.parse("https://t.me/EHR_QUICKINCOME_BOT"))
+                            try {
+                                context.startActivity(botIntent)
+                            } catch (e: Exception) {
+                                Toast.makeText(context, "Telegram Bot: @EHR_QUICKINCOME_BOT", Toast.LENGTH_SHORT).show()
+                            }
+                        },
                         shape = RoundedCornerShape(8.dp),
                         colors = ButtonDefaults.filledTonalButtonColors(containerColor = SurfaceWhite),
                         contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
                         modifier = Modifier.height(32.dp)
                     ) {
-                        Text("Open 2nr", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = PrimaryBlue)
+                        Text("TG Bot", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = PrimaryBlue)
                     }
 
                     FilledTonalButton(
-                        onClick = { AppLauncher.open2nrInSplitScreen(context) },
+                        onClick = {
+                            val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                            val clip = ClipData.newPlainText("Cloud Phone", metrics.currentSlotInfo)
+                            clipboard.setPrimaryClip(clip)
+                            Toast.makeText(context, "Cloud Telephony Info Copied", Toast.LENGTH_SHORT).show()
+                        },
                         shape = RoundedCornerShape(8.dp),
                         colors = ButtonDefaults.filledTonalButtonColors(containerColor = SoftBlueTile),
                         contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
                         modifier = Modifier.height(32.dp)
                     ) {
-                        Text("Split", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = PrimaryBlue)
+                        Text("Copy", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = PrimaryBlue)
                     }
                 }
             }

@@ -87,7 +87,7 @@ fun SettingsScreen(
                                 color = TextSlateDark
                             )
                             Text(
-                                text = "Cloud automation works 100% without these. Only needed for legacy local 2nr overlays",
+                                text = "Cloud automation works 100% independently via Telegram and Render Frankfurt cloud workers",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = TextMuted
                             )

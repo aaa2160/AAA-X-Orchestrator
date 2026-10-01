@@ -128,11 +128,35 @@ class AdBlockEngine(context: Context) {
         val host = request.url?.host?.lowercase() ?: return false
         val path = request.url?.path?.lowercase() ?: ""
 
-        // Check host matches or subdomains
-        for (blocked in blockedHosts) {
-            if (host == blocked || host.endsWith(".$blocked")) {
-                return true
-            }
+        // Never block core social, authentication, verification, and worker domains
+        if (host == "twitter.com" || host.endsWith(".twitter.com") ||
+            host == "x.com" || host.endsWith(".x.com") ||
+            host == "twimg.com" || host.endsWith(".twimg.com") ||
+            host == "t.co" || host.endsWith(".t.co") ||
+            host == "telegram.org" || host.endsWith(".telegram.org") ||
+            host == "t.me" || host.endsWith(".t.me") ||
+            host == "render.com" || host.endsWith(".render.com") ||
+            host == "onrender.com" || host.endsWith(".onrender.com") ||
+            host.contains("arkoselabs.com") ||
+            host.contains("prelude.dev") ||
+            host.contains("rekognition") ||
+            host.contains("amazonaws.com")
+        ) {
+            return false
+        }
+
+        // Fast O(1) host lookup
+        if (blockedHosts.contains(host)) {
+            return true
+        }
+        val parts = host.split(".")
+        if (parts.size >= 2) {
+            val rootDomain = parts.takeLast(2).joinToString(".")
+            if (blockedHosts.contains(rootDomain)) return true
+        }
+        if (parts.size >= 3) {
+            val subDomain = parts.takeLast(3).joinToString(".")
+            if (blockedHosts.contains(subDomain)) return true
         }
 
         // Common ad url signatures

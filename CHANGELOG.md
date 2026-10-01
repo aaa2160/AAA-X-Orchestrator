@@ -2,6 +2,37 @@
 
 All notable changes and architectural configurations for this project are documented here.
 
+## [2.1.0] - 2026-10-01
+
+### Added & Enhanced
+- **Open-Source MX Player Video Controls & Fullscreen Playback ([`BrowserScreen.kt`](file:///root/project/AAAX/app/src/main/java/com/aaa/orchestrator/ui/screens/BrowserScreen.kt))**:
+  - Implemented `WebChromeClient.onShowCustomView` and `onHideCustomView` with a full-screen hardware-accelerated video view.
+  - Added MX Player gesture controls: vertical drag on left screen half adjusts screen brightness (`WindowManager.LayoutParams.screenBrightness`), vertical drag on right screen half adjusts media volume (`AudioManager.STREAM_MUSIC`).
+  - Added horizontal swipe and double-tap gestures to seek video backward (-10s) or forward (+10s), plus center double-tap play/pause toggle.
+  - Added sleek on-screen HUD pill displaying active brightness %, volume %, or seek seconds.
+  - Added Playback Speed selector (0.5x, 0.75x, 1.0x, 1.25x, 1.5x, 2.0x), Picture-in-Picture (PiP) trigger, and 1-tap HTML5 stream downloader directly to `/storage/emulated/0/Download/AAAX/`.
+- **Chrome-Style Find In Page Feature ([`BrowserScreen.kt`](file:///root/project/AAAX/app/src/main/java/com/aaa/orchestrator/ui/screens/BrowserScreen.kt))**:
+  - Added floating in-page search bar beneath Omnibox with real-time query matching via `WebView.findAllAsync(query)`.
+  - Added live match count indicator (`3/14`), previous/next navigation buttons (`WebView.findNext`), and dismiss action clearing highlights.
+- **Chrome-Style Omnibox Text Alignment & Baseline Fix**:
+  - Replaced standard `TextField` with `BasicTextField` with custom decoration box, eliminating vertical clipping and centering text perfectly.
+  - Added dynamic SSL security lock, clear (X) icon, and reload button.
+- **Zero-Reset Screen Preservation ([`MainActivity.kt`](file:///root/project/AAAX/app/src/main/java/com/aaa/orchestrator/MainActivity.kt))**:
+  - Replaced the disposable Compose `when (selectedTab)` branch with a persistent root hierarchy keeping `BrowserScreen` continuously mounted in memory.
+  - Switching between Dashboard, Vault, Browser, and Settings preserves all tabs, DOM form inputs, and login sessions without page reload or reset.
+- **AdBlock Twitter Whitelist & O(1) Performance ([`AdBlockEngine.kt`](file:///root/project/AAAX/app/src/main/java/com/aaa/orchestrator/engine/AdBlockEngine.kt))**:
+  - Whitelisted `twitter.com`, `x.com`, `twimg.com`, `t.co`, `telegram.org`, `render.com`, `onrender.com`, `arkoselabs.com`, and `amazonaws.com`.
+  - Fixed Twitter blank screen issue caused by empty 0-byte chunk blocking.
+  - Converted linear list scan to O(1) domain set lookup, drastically reducing CPU load on mobile devices.
+- **Complete Elimination of Legacy 2nr Branding**:
+  - Replaced 2nr Telephony card on Dashboard with **Cloud Telephony & Telegram Worker** card displaying active virtual number and direct 1-tap `@EHR_QUICKINCOME_BOT` action.
+  - Cleaned up all remaining 2nr references across `AndroidManifest.xml`, `SettingsScreen.kt`, and `strings.xml`.
+- **Safe Geolocation Privacy Shield**:
+  - Encapsulated Frankfurt spoof script with `Object.defineProperty` and robust error handling to prevent `TypeError` exceptions on modern Chromium engines.
+- **Android Media & Storage Permissions ([`AndroidManifest.xml`](file:///root/project/AAAX/app/src/main/AndroidManifest.xml))**:
+  - Added `READ_MEDIA_IMAGES`, `READ_MEDIA_VIDEO`, `READ_EXTERNAL_STORAGE`, and `WRITE_EXTERNAL_STORAGE` for identity verification and downloads.
+  - Added `android:supportsPictureInPicture="true"` and `configChanges` to prevent activity restarts on rotation or PiP.
+
 ## [2.0.0] - 2026-10-01
 
 ### Added & Enhanced

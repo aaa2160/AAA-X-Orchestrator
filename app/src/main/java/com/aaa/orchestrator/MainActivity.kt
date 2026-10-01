@@ -6,8 +6,11 @@ import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.ui.unit.dp
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -124,44 +127,60 @@ class MainActivity : ComponentActivity() {
                         }
                     }
                 ) { innerPadding ->
-                    when (selectedTab) {
-                        NavTab.Dashboard -> DashboardScreen(
-                            state = state,
-                            metrics = metrics,
-                            onStartClick = {
-                                OrchestratorAccessibilityService.isAutomationRunning.set(true)
-                                OrchestratorForegroundService.start(this, "Autonomous Workflow Running")
-                                engine.startAutomation()
-                                selectedTab = NavTab.Browser
-                            },
-                            onStopClick = {
-                                OrchestratorAccessibilityService.isAutomationRunning.set(false)
-                                engine.stopAutomation()
-                                OrchestratorForegroundService.stop(this)
-                            },
-                            modifier = Modifier.padding(innerPadding)
-                        )
-                        NavTab.Vault -> VaultScreen(
-                            accounts = accounts,
-                            onDeleteAccount = { id ->
-                                scope.launch { accountRepo.deleteAccountById(id) }
-                            },
-                            onClearAllAccounts = {
-                                scope.launch { accountRepo.deleteAllAccounts() }
-                            },
-                            modifier = Modifier.padding(innerPadding)
-                        )
-                        NavTab.Browser -> BrowserScreen(
-                            engine = engine,
-                            modifier = Modifier.padding(innerPadding)
-                        )
-                        NavTab.Settings -> SettingsScreen(
-                            onTriggerKillSwitchTest = {
-                                engine.triggerEmergencyKillSwitch()
-                                Toast.makeText(this, "Emergency Kill Switch Activated (<1ms)", Toast.LENGTH_SHORT).show()
-                            },
-                            modifier = Modifier.padding(innerPadding)
-                        )
+                    Box(modifier = Modifier.fillMaxSize().padding(innerPadding)) {
+                        val isBrowserTab = selectedTab == NavTab.Browser
+
+                        when (selectedTab) {
+                            NavTab.Dashboard -> DashboardScreen(
+                                state = state,
+                                metrics = metrics,
+                                onStartClick = {
+                                    OrchestratorAccessibilityService.isAutomationRunning.set(true)
+                                    OrchestratorForegroundService.start(this@MainActivity, "Autonomous Workflow Running")
+                                    engine.startAutomation()
+                                    selectedTab = NavTab.Browser
+                                },
+                                onStopClick = {
+                                    OrchestratorAccessibilityService.isAutomationRunning.set(false)
+                                    engine.stopAutomation()
+                                    OrchestratorForegroundService.stop(this@MainActivity)
+                                },
+                                modifier = Modifier.fillMaxSize()
+                            )
+                            NavTab.Vault -> VaultScreen(
+                                accounts = accounts,
+                                onDeleteAccount = { id ->
+                                    scope.launch { accountRepo.deleteAccountById(id) }
+                                },
+                                onClearAllAccounts = {
+                                    scope.launch { accountRepo.deleteAllAccounts() }
+                                },
+                                modifier = Modifier.fillMaxSize()
+                            )
+                            NavTab.Settings -> SettingsScreen(
+                                onTriggerKillSwitchTest = {
+                                    engine.triggerEmergencyKillSwitch()
+                                    Toast.makeText(this@MainActivity, "Emergency Kill Switch Activated (<1ms)", Toast.LENGTH_SHORT).show()
+                                },
+                                modifier = Modifier.fillMaxSize()
+                            )
+                            NavTab.Browser -> {
+                                // Handled by persistent Box below
+                            }
+                        }
+
+                        // BrowserScreen is ALWAYS kept in the composition hierarchy so its WebViews, tabs, DOM state, forms, and video sessions never reset!
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .then(if (isBrowserTab) Modifier else Modifier.size(0.dp))
+                        ) {
+                            BrowserScreen(
+                                engine = engine,
+                                isVisible = isBrowserTab,
+                                modifier = Modifier.fillMaxSize()
+                            )
+                        }
                     }
                 }
             }

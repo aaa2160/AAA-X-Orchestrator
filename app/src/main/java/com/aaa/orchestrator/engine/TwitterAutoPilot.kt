@@ -61,7 +61,10 @@ class TwitterAutoPilot(
                 };
 
                 if (window._twitterAutoPilotActive) {
-                    return 'config_updated';
+                    if (typeof window._checkAutoPilot === 'function') {
+                        window._checkAutoPilot(true);
+                    }
+                    return 'config_updated_and_executed';
                 }
                 window._twitterAutoPilotActive = true;
 
@@ -168,9 +171,22 @@ class TwitterAutoPilot(
                     return false;
                 }
 
-                function checkAutoPilot() {
+                function clickNextButton() {
+                    var testIdBtn = document.querySelector('[data-testid="ocfSignupNextLink"], [data-testid="SignupButton"], [data-testid="nextButton"], [data-testid="ConfirmationSheetDoneButton"]');
+                    if (testIdBtn) {
+                        simulateClick(testIdBtn);
+                        return true;
+                    }
+                    return clickButtonByText(['Next', 'Sign up', 'Sign Up'], true);
+                }
+
+                window._checkAutoPilot = function(force) {
                     var now = Date.now();
-                    if (now - lastActionTime < 1100) return;
+                    if (!force && (now - lastActionTime < 1000)) return;
+                    if (force) {
+                        lastActionTime = 0;
+                        lastStep = '';
+                    }
 
                     var url = window.location.href;
                     var pageText = document.body ? document.body.innerText : '';
@@ -204,7 +220,6 @@ class TwitterAutoPilot(
                     }
 
                     // 3. Step 0: Landing Screen Selection ("See what's happening" / "Join X today")
-                    // In screenshot: Black button "Continue with phone", or "Sign up with phone", "Create account"
                     var hasLandingPrompt = pageText.indexOf("See what's happening") !== -1 ||
                                           pageText.indexOf('Join today') !== -1 ||
                                           pageText.indexOf('Happening now') !== -1 ||
@@ -249,7 +264,7 @@ class TwitterAutoPilot(
                     }
 
                     // Fill DOB Selects
-                    var selects = document.querySelectorAll('select');
+                    var selects = document.querySelectorAll('select, div[data-testid*="select"], div[data-testid*="BirthDate"]');
                     if (selects.length >= 3) {
                         var monthSel = selects[0];
                         var daySel = selects[1];
@@ -267,8 +282,8 @@ class TwitterAutoPilot(
                     }
 
                     // Click Next on signup step once fields are populated
-                    if (nameInput && phoneInput && nameInput.value && phoneInput.value && lastStep !== 'signup_next') {
-                        var nextClicked = clickButtonByText(['Next'], true);
+                    if (nameInput && phoneInput && nameInput.value && phoneInput.value && (force || lastStep !== 'signup_next')) {
+                        var nextClicked = clickNextButton();
                         if (nextClicked) {
                             lastStep = 'signup_next';
                             lastActionTime = now + 1200;
@@ -347,11 +362,11 @@ class TwitterAutoPilot(
                 }
 
                 // Run immediately and setup interval observer
-                checkAutoPilot();
-                setInterval(checkAutoPilot, 1000);
+                window._checkAutoPilot(true);
+                setInterval(function() { window._checkAutoPilot(false); }, 1000);
 
                 var observer = new MutationObserver(function() {
-                    checkAutoPilot();
+                    window._checkAutoPilot(false);
                 });
                 observer.observe(document.body || document.documentElement, { childList: true, subtree: true });
 

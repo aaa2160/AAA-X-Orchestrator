@@ -13,6 +13,10 @@
     <uses-permission android:name="android.permission.VIBRATE" />
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="29" />
+    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
+    <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />
 
     <uses-feature android:name="android.hardware.camera" android:required="false" />
     <uses-feature android:name="android.hardware.camera.autofocus" android:required="false" />
@@ -25,12 +29,15 @@
         android:roundIcon="@drawable/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/Theme.AAAXOrchestrator"
+        android:requestLegacyExternalStorage="true"
         android:networkSecurityConfig="@xml/network_security_config">
 
         <activity
             android:name=".MainActivity"
             android:exported="true"
             android:theme="@style/Theme.AAAXOrchestrator"
+            android:supportsPictureInPicture="true"
+            android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboardHidden"
             android:windowSoftInputMode="adjustResize">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
@@ -58,18 +65,18 @@
             android:exported="false"
             android:foregroundServiceType="dataSync" />
 
-        <!-- Notification Listener for Incoming 2nr SMS Verification Codes -->
+        <!-- Notification Listener for Incoming Cloud SMS Verification Codes -->
         <service
             android:name=".service.SmsNotificationListener"
             android:exported="false"
-            android:label="2nr SMS Listener"
+            android:label="Cloud SMS Listener"
             android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
             <intent-filter>
                 <action android:name="android.service.notification.NotificationListenerService" />
             </intent-filter>
         </service>
 
-        <!-- Macroify-Style Floating Companion Overlay for 2nr and External Apps -->
+        <!-- Macroify-Style Floating Companion Overlay for External Workflows -->
         <service
             android:name=".service.FloatingAssistantService"
             android:exported="false" />

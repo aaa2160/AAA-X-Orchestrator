@@ -1,15 +1,20 @@
 package com.aaa.orchestrator.ui.screens
 
 import android.annotation.SuppressLint
+import android.app.Activity
 import android.app.DownloadManager
+import android.app.PictureInPictureParams
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
+import android.media.AudioManager
 import android.net.Uri
+import android.os.Build
 import android.os.Environment
 import android.view.View
 import android.view.ViewGroup
+import android.view.WindowManager
 import android.webkit.*
 import android.widget.FrameLayout
 import android.widget.Toast
@@ -20,11 +25,14 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
@@ -34,8 +42,11 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
@@ -73,6 +84,7 @@ data class HistoryItem(
 fun BrowserScreen(
     engine: OrchestratorEngine? = null,
     activeUrl: String = "https://x.com/i/flow/signup",
+    isVisible: Boolean = true,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -94,6 +106,26 @@ fun BrowserScreen(
     var canGoForward by remember { mutableStateOf(false) }
     var isDesktopMode by remember { mutableStateOf(false) }
     var showMenu by remember { mutableStateOf(false) }
+
+    // Find In Page State
+    var isFindInPageVisible by remember { mutableStateOf(false) }
+    var findQuery by remember { mutableStateOf("") }
+    var findMatchCount by remember { mutableStateOf(0) }
+    var findActiveMatchIndex by remember { mutableStateOf(0) }
+
+    // MX Player Fullscreen & Video State
+    var customVideoView by remember { mutableStateOf<View?>(null) }
+    var customViewCallback by remember { mutableStateOf<WebChromeClient.CustomViewCallback?>(null) }
+    var showMediaController by remember { mutableStateOf(false) }
+    var playbackSpeed by remember { mutableStateOf(1.0f) }
+    var detectedVideoUrl by remember { mutableStateOf<String?>(null) }
+
+    // MX Player Gesture HUD State
+    var gestureHudText by remember { mutableStateOf<String?>(null) }
+    var gestureHudIcon by remember { mutableStateOf<ImageVector?>(null) }
+
+    // Audio & Window utilities
+    val audioManager = remember { context.getSystemService(Context.AUDIO_SERVICE) as AudioManager }
 
     // Tools & Bookmarks
     var showBookmarksHistory by remember { mutableStateOf(false) }
@@ -137,6 +169,12 @@ fun BrowserScreen(
     var pendingWebPermission by remember { mutableStateOf<PermissionRequest?>(null) }
     var fileUploadCallback by remember { mutableStateOf<ValueCallback<Array<Uri>>?>(null) }
 
+    LaunchedEffect(isVisible) {
+        if (activeWebView != null) {
+            activeWebView?.visibility = if (isVisible) View.VISIBLE else View.GONE
+        }
+    }
+
     val cameraLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
     ) { isGranted ->
@@ -165,9 +203,155 @@ fun BrowserScreen(
         fileUploadCallback = null
     }
 
-    // Chrome-Style Hardware Back Navigation: browse back before exiting tab
-    BackHandler(enabled = canGoBack) {
-        activeWebView?.goBack()
+    fun showGestureFeedback(icon: ImageVector, text: String) {
+        gestureHudIcon = icon
+        gestureHudText = text
+        scope.launch {
+            kotlinx.coroutines.delay(1200)
+            if (gestureHudText == text) {
+                gestureHudText = null
+                gestureHudIcon = null
+            }
+        }
+    }
+
+    fun adjustVolume(deltaFraction: Float) {
+        try {
+            val maxVol = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
+            val currentVol = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC)
+            val change = (deltaFraction * maxVol).toInt().coerceAtLeast(-maxVol).coerceAtMost(maxVol)
+            val newVol = (currentVol + change).coerceIn(0, maxVol)
+            audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, newVol, 0)
+            val percent = (newVol * 100) / maxVol
+            val icon = if (newVol == 0) Icons.Default.VolumeMute else if (percent > 50) Icons.Default.VolumeUp else Icons.Default.VolumeDown
+            showGestureFeedback(icon, "Volume: $percent%")
+        } catch (e: Exception) {
+            Timber.e(e, "Error adjusting volume")
+        }
+    }
+
+    fun adjustBrightness(deltaFraction: Float) {
+        try {
+            val activity = context as? Activity ?: return
+            val lp = activity.window.attributes
+            val cur = if (lp.screenBrightness < 0f) 0.5f else lp.screenBrightness
+            val newBrightness = (cur + deltaFraction).coerceIn(0.05f, 1.0f)
+            lp.screenBrightness = newBrightness
+            activity.window.attributes = lp
+            val percent = (newBrightness * 100).toInt()
+            showGestureFeedback(Icons.Default.BrightnessMedium, "Brightness: $percent%")
+        } catch (e: Exception) {
+            Timber.e(e, "Error adjusting brightness")
+        }
+    }
+
+    fun seekActiveVideo(offsetSeconds: Int) {
+        val sign = if (offsetSeconds > 0) "+" else ""
+        val icon = if (offsetSeconds > 0) Icons.Default.FastForward else Icons.Default.FastRewind
+        showGestureFeedback(icon, "Seek: $sign${offsetSeconds}s")
+        activeWebView?.evaluateJavascript(
+            """
+            (function() {
+                var v = document.querySelector('video');
+                if (v) { v.currentTime = Math.max(0, v.currentTime + $offsetSeconds); }
+            })();
+            """.trimIndent(), null
+        )
+    }
+
+    fun setVideoSpeed(speed: Float) {
+        playbackSpeed = speed
+        showGestureFeedback(Icons.Default.Speed, "Speed: ${speed}x")
+        activeWebView?.evaluateJavascript(
+            """
+            (function() {
+                var videos = document.querySelectorAll('video');
+                for (var i = 0; i < videos.length; i++) {
+                    videos[i].playbackRate = $speed;
+                }
+            })();
+            """.trimIndent(), null
+        )
+    }
+
+    fun triggerVideoPip() {
+        val activity = context as? Activity
+        activeWebView?.evaluateJavascript(
+            """
+            (function() {
+                var v = document.querySelector('video');
+                if (v && v.requestPictureInPicture) {
+                    v.requestPictureInPicture();
+                    return 'js_pip';
+                }
+                return 'no_js_pip';
+            })();
+            """.trimIndent()
+        ) { res ->
+            if (res?.contains("no_js_pip") == true && Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                try {
+                    activity?.enterPictureInPictureMode(PictureInPictureParams.Builder().build())
+                } catch (e: Exception) {
+                    Toast.makeText(context, "PiP not supported for this media", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+    }
+
+    fun detectAndDownloadVideo() {
+        activeWebView?.evaluateJavascript(
+            """
+            (function() {
+                var v = document.querySelector('video');
+                if (!v) return '';
+                return v.currentSrc || v.src || (v.querySelector('source') ? v.querySelector('source').src : '');
+            })();
+            """.trimIndent()
+        ) { videoSrc ->
+            val cleanUrl = videoSrc?.replace("\"", "")?.trim()
+            if (!cleanUrl.isNullOrBlank() && (cleanUrl.startsWith("http://") || cleanUrl.startsWith("https://"))) {
+                detectedVideoUrl = cleanUrl
+                try {
+                    val dm = context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
+                    val fileName = "video_" + SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date()) + ".mp4"
+                    val request = DownloadManager.Request(Uri.parse(cleanUrl)).apply {
+                        setTitle(fileName)
+                        setDescription("Downloading stream via MX Media Downloader")
+                        setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
+                        setDestinationInExternalPublicDir(
+                            Environment.DIRECTORY_DOWNLOADS,
+                            "AAAX/$fileName"
+                        )
+                    }
+                    dm.enqueue(request)
+                    Toast.makeText(context, "Downloading video to Download/AAAX/$fileName", Toast.LENGTH_LONG).show()
+                } catch (e: Exception) {
+                    Timber.e(e, "Error downloading video")
+                    Toast.makeText(context, "Failed to download stream: ${e.message}", Toast.LENGTH_SHORT).show()
+                }
+            } else {
+                Toast.makeText(context, "No downloadable HTML5 video stream found on current page", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    // Chrome-Style Hardware Back Navigation: exit fullscreen video -> close find bar -> go back
+    BackHandler(enabled = customVideoView != null || isFindInPageVisible || canGoBack) {
+        when {
+            customVideoView != null -> {
+                customViewCallback?.onCustomViewHidden()
+                customVideoView = null
+                customViewCallback = null
+            }
+            isFindInPageVisible -> {
+                isFindInPageVisible = false
+                findQuery = ""
+                activeWebView?.clearMatches()
+            }
+            canGoBack -> {
+                activeWebView?.goBack()
+            }
+        }
     }
 
     // AdBlock Engine
@@ -176,29 +360,36 @@ fun BrowserScreen(
     // Geolocation Privacy Spoof Script (Frankfurt Gateway)
     val geoPrivacyScript = """
         (function() {
-            var fakeCoords = {
-                latitude: 50.1109,
-                longitude: 8.6821,
-                accuracy: 35.0,
-                altitude: null,
-                altitudeAccuracy: null,
-                heading: null,
-                speed: null
-            };
-            if (navigator.geolocation) {
-                navigator.geolocation.getCurrentPosition = function(success, error, options) {
-                    if (typeof success === 'function') {
-                        success({ coords: fakeCoords, timestamp: Date.now() });
-                    }
+            try {
+                var fakeCoords = {
+                    latitude: 50.1109,
+                    longitude: 8.6821,
+                    accuracy: 35.0,
+                    altitude: null,
+                    altitudeAccuracy: null,
+                    heading: null,
+                    speed: null
                 };
-                navigator.geolocation.watchPosition = function(success, error, options) {
-                    if (typeof success === 'function') {
-                        success({ coords: fakeCoords, timestamp: Date.now() });
-                    }
-                    return 101;
+                var fakePos = { coords: fakeCoords, timestamp: Date.now() };
+                var fakeGeo = {
+                    getCurrentPosition: function(s, e, o) { if (typeof s === 'function') s(fakePos); },
+                    watchPosition: function(s, e, o) { if (typeof s === 'function') s(fakePos); return 101; },
+                    clearWatch: function(id) {}
                 };
-                navigator.geolocation.clearWatch = function(id) {};
-            }
+                try {
+                    Object.defineProperty(navigator, 'geolocation', {
+                        value: fakeGeo,
+                        configurable: true,
+                        writable: true
+                    });
+                } catch(e) {
+                    try {
+                        navigator.geolocation.getCurrentPosition = fakeGeo.getCurrentPosition;
+                        navigator.geolocation.watchPosition = fakeGeo.watchPosition;
+                        navigator.geolocation.clearWatch = fakeGeo.clearWatch;
+                    } catch(e2) {}
+                }
+            } catch(err) {}
         })();
     """.trimIndent()
 
@@ -390,10 +581,32 @@ fun BrowserScreen(
                     result?.confirm()
                     return true
                 }
+
+                override fun onShowCustomView(view: View?, callback: CustomViewCallback?) {
+                    customVideoView = view
+                    customViewCallback = callback
+                }
+
+                override fun onHideCustomView() {
+                    customViewCallback?.onCustomViewHidden()
+                    customVideoView = null
+                    customViewCallback = null
+                }
+            }
+
+            // Find in Page listener
+            setFindListener { activeMatchOrdinal, numberOfMatches, isDoneCounting ->
+                findActiveMatchIndex = activeMatchOrdinal
+                findMatchCount = numberOfMatches
             }
 
             // Client with Titanium AdBlock and AutoPilot injection
             webViewClient = object : WebViewClient() {
+                override fun onReceivedError(view: WebView?, request: WebResourceRequest?, error: WebResourceError?) {
+                    super.onReceivedError(view, request, error)
+                    Timber.w("WebView onReceivedError: ${error?.description} on ${request?.url}")
+                }
+
                 override fun shouldInterceptRequest(
                     view: WebView?,
                     request: WebResourceRequest?
@@ -590,28 +803,15 @@ fun BrowserScreen(
 
                         Spacer(modifier = Modifier.width(6.dp))
 
-                        // URL / Search Input Field
-                        TextField(
+                        // URL / Search Input Field using BasicTextField for vertically-centered crisp text
+                        BasicTextField(
                             value = inputUrl,
                             onValueChange = { inputUrl = it },
-                            placeholder = {
-                                Text(
-                                    text = "Search or type URL",
-                                    fontSize = 13.sp,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-                                    maxLines = 1
-                                )
-                            },
                             singleLine = true,
-                            textStyle = LocalTextStyle.current.copy(
-                                fontSize = 13.sp,
-                                color = MaterialTheme.colorScheme.onSurface
-                            ),
-                            colors = TextFieldDefaults.colors(
-                                focusedContainerColor = Color.Transparent,
-                                unfocusedContainerColor = Color.Transparent,
-                                focusedIndicatorColor = Color.Transparent,
-                                unfocusedIndicatorColor = Color.Transparent
+                            textStyle = TextStyle(
+                                fontSize = 13.5.sp,
+                                color = MaterialTheme.colorScheme.onSurface,
+                                fontWeight = FontWeight.Normal
                             ),
                             keyboardOptions = KeyboardOptions(
                                 keyboardType = KeyboardType.Uri,
@@ -628,11 +828,39 @@ fun BrowserScreen(
                                     activeWebView?.loadUrl(formatted)
                                 }
                             ),
+                            decorationBox = { innerTextField ->
+                                Box(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    contentAlignment = Alignment.CenterStart
+                                ) {
+                                    if (inputUrl.isEmpty()) {
+                                        Text(
+                                            text = "Search or type URL",
+                                            fontSize = 13.5.sp,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                                            maxLines = 1
+                                        )
+                                    }
+                                    innerTextField()
+                                }
+                            },
                             modifier = Modifier.weight(1f)
                         )
 
                         // Clear or Refresh Button inside Omnibox
-                        if (isLoading) {
+                        if (inputUrl != currentUrl && inputUrl.isNotEmpty()) {
+                            IconButton(
+                                onClick = { inputUrl = "" },
+                                modifier = Modifier.size(28.dp)
+                            ) {
+                                Icon(
+                                    Icons.Default.Close,
+                                    contentDescription = "Clear",
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            }
+                        } else if (isLoading) {
                             IconButton(
                                 onClick = { activeWebView?.stopLoading() },
                                 modifier = Modifier.size(28.dp)
@@ -709,6 +937,22 @@ fun BrowserScreen(
                             }
                         )
                         DropdownMenuItem(
+                            text = { Text("Find in page") },
+                            leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, tint = PrimaryBlue) },
+                            onClick = {
+                                showMenu = false
+                                isFindInPageVisible = true
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("MX Media Controls") },
+                            leadingIcon = { Icon(Icons.Default.PlayCircle, contentDescription = null, tint = PrimaryBlue) },
+                            onClick = {
+                                showMenu = false
+                                showMediaController = true
+                            }
+                        )
+                        DropdownMenuItem(
                             text = { Text(if (isHudVisible) "Hide Auto-Pilot HUD" else "Show Auto-Pilot HUD") },
                             leadingIcon = { Icon(Icons.Default.SmartToy, contentDescription = null) },
                             onClick = {
@@ -776,6 +1020,102 @@ fun BrowserScreen(
                                 Toast.makeText(context, "Titanium AdBlocker: $blockedAdsCount ads, $blockedTrackersCount trackers blocked.", Toast.LENGTH_SHORT).show()
                             }
                         )
+                    }
+                }
+            }
+        }
+
+        // ==========================================
+        // 1.5 CHROME-STYLE FIND IN PAGE BAR
+        // ==========================================
+        AnimatedVisibility(visible = isFindInPageVisible) {
+            Surface(
+                color = MaterialTheme.colorScheme.surfaceVariant,
+                tonalElevation = 4.dp,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 8.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        Icons.Default.Search,
+                        contentDescription = "Find",
+                        tint = PrimaryBlue,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    BasicTextField(
+                        value = findQuery,
+                        onValueChange = { query ->
+                            findQuery = query
+                            if (query.isNotEmpty()) {
+                                activeWebView?.findAllAsync(query)
+                            } else {
+                                activeWebView?.clearMatches()
+                                findMatchCount = 0
+                                findActiveMatchIndex = 0
+                            }
+                        },
+                        singleLine = true,
+                        textStyle = TextStyle(
+                            fontSize = 13.sp,
+                            color = MaterialTheme.colorScheme.onSurface
+                        ),
+                        decorationBox = { inner ->
+                            Box(
+                                modifier = Modifier.fillMaxWidth(),
+                                contentAlignment = Alignment.CenterStart
+                            ) {
+                                if (findQuery.isEmpty()) {
+                                    Text(
+                                        text = "Find in page...",
+                                        fontSize = 13.sp,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                                    )
+                                }
+                                inner()
+                            }
+                        },
+                        modifier = Modifier.weight(1f)
+                    )
+
+                    if (findQuery.isNotEmpty()) {
+                        Text(
+                            text = if (findMatchCount > 0) "${findActiveMatchIndex + 1}/$findMatchCount" else "0/0",
+                            fontSize = 12.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(horizontal = 6.dp)
+                        )
+                    }
+
+                    IconButton(
+                        onClick = { activeWebView?.findNext(false) },
+                        enabled = findMatchCount > 0,
+                        modifier = Modifier.size(28.dp)
+                    ) {
+                        Icon(Icons.Default.KeyboardArrowUp, contentDescription = "Previous", modifier = Modifier.size(18.dp))
+                    }
+
+                    IconButton(
+                        onClick = { activeWebView?.findNext(true) },
+                        enabled = findMatchCount > 0,
+                        modifier = Modifier.size(28.dp)
+                    ) {
+                        Icon(Icons.Default.KeyboardArrowDown, contentDescription = "Next", modifier = Modifier.size(18.dp))
+                    }
+
+                    IconButton(
+                        onClick = {
+                            isFindInPageVisible = false
+                            findQuery = ""
+                            activeWebView?.clearMatches()
+                        },
+                        modifier = Modifier.size(28.dp)
+                    ) {
+                        Icon(Icons.Default.Close, contentDescription = "Close", modifier = Modifier.size(16.dp))
                     }
                 }
             }
@@ -981,8 +1321,38 @@ fun BrowserScreen(
                         addView(initialWebView)
                         activeWebView = initialWebView
                     }
+                },
+                update = { layout ->
+                    containerLayout = layout
                 }
             )
+
+            // Gesture HUD Indicator Pill
+            if (gestureHudText != null) {
+                Surface(
+                    shape = RoundedCornerShape(20.dp),
+                    color = Color.Black.copy(alpha = 0.8f),
+                    modifier = Modifier
+                        .align(Alignment.Center)
+                        .padding(16.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        gestureHudIcon?.let { icon ->
+                            Icon(icon, contentDescription = null, tint = Color.White, modifier = Modifier.size(20.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
+                        }
+                        Text(
+                            text = gestureHudText ?: "",
+                            color = Color.White,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 14.sp
+                        )
+                    }
+                }
+            }
         }
 
         // ==========================================
@@ -1029,18 +1399,35 @@ fun BrowserScreen(
                     )
                 }
 
-                // Direct X Signup Shortcut
+                // Find in Page Shortcut
                 IconButton(
                     onClick = {
-                        activeWebView?.loadUrl("https://x.com/i/flow/signup")
+                        isFindInPageVisible = !isFindInPageVisible
+                        if (!isFindInPageVisible) {
+                            findQuery = ""
+                            activeWebView?.clearMatches()
+                        }
                     },
                     modifier = Modifier.size(36.dp)
                 ) {
                     Icon(
-                        Icons.Default.PersonAdd,
-                        contentDescription = "X Signup",
-                        tint = PrimaryBlue,
+                        Icons.Default.Search,
+                        contentDescription = "Find in Page",
+                        tint = if (isFindInPageVisible) PrimaryBlue else MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.size(18.dp)
+                    )
+                }
+
+                // MX Media Tools Shortcut
+                IconButton(
+                    onClick = { showMediaController = true },
+                    modifier = Modifier.size(36.dp)
+                ) {
+                    Icon(
+                        Icons.Default.PlayCircle,
+                        contentDescription = "MX Player Media Tools",
+                        tint = PrimaryBlue,
+                        modifier = Modifier.size(20.dp)
                     )
                 }
 
@@ -1197,16 +1584,16 @@ fun BrowserScreen(
     }
 
     // ==========================================
-    // 7. PHONE NUMBER EDIT DIALOG
+    // 7. CLOUD PHONE NUMBER EDIT DIALOG
     // ==========================================
     if (showPhoneEditDialog) {
         AlertDialog(
             onDismissRequest = { showPhoneEditDialog = false },
-            title = { Text("Active 2nr Telephony Number") },
+            title = { Text("Active Cloud Phone Number") },
             text = {
                 Column {
                     Text(
-                        "Set the Polish number captured from 2nr or Render Cloud:",
+                        "Set the active phone number for automated signup:",
                         fontSize = 12.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -1240,6 +1627,83 @@ fun BrowserScreen(
             dismissButton = {
                 OutlinedButton(onClick = { showPhoneEditDialog = false }) {
                     Text("Cancel")
+                }
+            }
+        )
+    }
+
+    // ==========================================
+    // 7.5 MX PLAYER MEDIA CONTROLLER DIALOG
+    // ==========================================
+    if (showMediaController) {
+        AlertDialog(
+            onDismissRequest = { showMediaController = false },
+            title = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.PlayCircle, contentDescription = null, tint = PrimaryBlue)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("MX Media & Video Tools", fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                }
+            },
+            text = {
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    Text("Playback Speed", fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        listOf(0.5f, 0.75f, 1.0f, 1.25f, 1.5f, 2.0f).forEach { speed ->
+                            FilterChip(
+                                selected = playbackSpeed == speed,
+                                onClick = { setVideoSpeed(speed) },
+                                label = { Text("${speed}x", fontSize = 10.sp) }
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(14.dp))
+                    HorizontalDivider()
+                    Spacer(modifier = Modifier.height(14.dp))
+
+                    Text("Media Controls", fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    // PiP Button
+                    OutlinedButton(
+                        onClick = {
+                            triggerVideoPip()
+                            showMediaController = false
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Icon(Icons.Default.PictureInPicture, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Picture-in-Picture (PiP)", fontSize = 12.sp)
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    // 1-Tap Stream Downloader
+                    Button(
+                        onClick = {
+                            detectAndDownloadVideo()
+                            showMediaController = false
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(8.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = PrimaryBlue)
+                    ) {
+                        Icon(Icons.Default.Download, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Download Video Stream", fontSize = 12.sp)
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showMediaController = false }) {
+                    Text("Done")
                 }
             }
         )
@@ -1322,6 +1786,135 @@ fun BrowserScreen(
                 }
             }
         )
+    }
+
+    // ==========================================
+    // 9. FULLSCREEN MX PLAYER VIDEO OVERLAY
+    // ==========================================
+    if (customVideoView != null) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black)
+                .pointerInput(Unit) {
+                    var startSideIsLeft = true
+                    detectVerticalDragGestures(
+                        onDragStart = { offset ->
+                            startSideIsLeft = offset.x < size.width / 2
+                        },
+                        onVerticalDrag = { change, dragAmount ->
+                            change.consume()
+                            val deltaFraction = -dragAmount / size.height.toFloat()
+                            if (startSideIsLeft) {
+                                adjustBrightness(deltaFraction * 1.5f)
+                            } else {
+                                adjustVolume(deltaFraction * 1.5f)
+                            }
+                        }
+                    )
+                }
+                .pointerInput(Unit) {
+                    detectTapGestures(
+                        onDoubleTap = { offset ->
+                            if (offset.x < size.width * 0.35f) {
+                                seekActiveVideo(-10)
+                            } else if (offset.x > size.width * 0.65f) {
+                                seekActiveVideo(10)
+                            } else {
+                                activeWebView?.evaluateJavascript(
+                                    "var v = document.querySelector('video'); if (v) { if (v.paused) v.play(); else v.pause(); }",
+                                    null
+                                )
+                                showGestureFeedback(Icons.Default.PlayArrow, "Play / Pause")
+                            }
+                        }
+                    )
+                }
+        ) {
+            AndroidView(
+                factory = { customVideoView!! },
+                modifier = Modifier.fillMaxSize()
+            )
+
+            // Top Bar Controls Overlay for Fullscreen Video
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp)
+                    .align(Alignment.TopCenter),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // Exit Fullscreen Button
+                IconButton(
+                    onClick = {
+                        customViewCallback?.onCustomViewHidden()
+                        customVideoView = null
+                        customViewCallback = null
+                    },
+                    modifier = Modifier
+                        .size(40.dp)
+                        .background(Color.Black.copy(alpha = 0.5f), CircleShape)
+                ) {
+                    Icon(Icons.Default.ArrowBack, contentDescription = "Exit Fullscreen", tint = Color.White)
+                }
+
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    // Speed Toggle
+                    FilledTonalButton(
+                        onClick = {
+                            val nextSpeed = when (playbackSpeed) {
+                                1.0f -> 1.25f
+                                1.25f -> 1.5f
+                                1.5f -> 2.0f
+                                2.0f -> 0.5f
+                                else -> 1.0f
+                            }
+                            setVideoSpeed(nextSpeed)
+                        },
+                        colors = ButtonDefaults.filledTonalButtonColors(containerColor = Color.Black.copy(alpha = 0.6f)),
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Text("${playbackSpeed}x", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    }
+
+                    // PiP Button
+                    IconButton(
+                        onClick = { triggerVideoPip() },
+                        modifier = Modifier
+                            .size(40.dp)
+                            .background(Color.Black.copy(alpha = 0.5f), CircleShape)
+                    ) {
+                        Icon(Icons.Default.PictureInPicture, contentDescription = "PiP", tint = Color.White)
+                    }
+                }
+            }
+
+            // Gesture HUD Pill Center Screen
+            if (gestureHudText != null) {
+                Surface(
+                    shape = RoundedCornerShape(24.dp),
+                    color = Color.Black.copy(alpha = 0.85f),
+                    modifier = Modifier.align(Alignment.Center)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        gestureHudIcon?.let { icon ->
+                            Icon(icon, contentDescription = null, tint = Color.White, modifier = Modifier.size(24.dp))
+                            Spacer(modifier = Modifier.width(10.dp))
+                        }
+                        Text(
+                            text = gestureHudText ?: "",
+                            color = Color.White,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 15.sp
+                        )
+                    }
+                }
+            }
+        }
     }
 }
 
