@@ -929,9 +929,9 @@ fun BrowserScreen(
         val active = if (current != null) webViewPool[current.id] else null
         if (active != null) {
             activeWebView = active
-            currentUrl = active.url ?: tabs[newIndex].url
+            currentUrl = active.url ?: tabs.getOrNull(newIndex)?.url ?: ""
             inputUrl = currentUrl
-            pageTitle = active.title ?: tabs[newIndex].title
+            pageTitle = active.title ?: tabs.getOrNull(newIndex)?.title ?: "New Tab"
             canGoBack = active.canGoBack()
             canGoForward = active.canGoForward()
             isLoading = false
@@ -1681,7 +1681,8 @@ fun BrowserScreen(
                         )
 
                         // Initialize or reuse initial tab webview
-                        val currentTab = BrowserTabManager.getCurrentTab(isAutomationMode) ?: tabs[0]
+                        val defaultTab = BrowserTab(url = if (isAutomationMode) "https://x.com/i/flow/signup" else "https://www.google.com")
+                        val currentTab = BrowserTabManager.getCurrentTab(isAutomationMode) ?: tabs.firstOrNull() ?: defaultTab
                         val existingWv = webViewPool[currentTab.id]
                         val initialWebView = if (existingWv != null) {
                             (existingWv.parent as? ViewGroup)?.removeView(existingWv)
@@ -1705,7 +1706,8 @@ fun BrowserScreen(
                             layout.addView(wv)
                         }
                     }
-                    val currentTab = BrowserTabManager.getCurrentTab(isAutomationMode) ?: tabs[0]
+                    val defaultTab = BrowserTab(url = if (isAutomationMode) "https://x.com/i/flow/signup" else "https://www.google.com")
+                    val currentTab = BrowserTabManager.getCurrentTab(isAutomationMode) ?: tabs.firstOrNull() ?: defaultTab
                     val active = webViewPool[currentTab.id]
                     if (active != null && active.visibility != View.VISIBLE) {
                         active.visibility = View.VISIBLE
