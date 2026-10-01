@@ -78,10 +78,126 @@ def set_phone(payload: PhonePayload):
 
 phone_request_pending = False
 
+# Fully Cloud-Integrated Telegram Worker (No local background task needed)
+STRING_SESSION = os.environ.get("TELEGRAM_STRING_SESSION")
+API_ID = int(os.environ.get("TELEGRAM_API_ID", "2040"))
+API_HASH = os.environ.get("TELEGRAM_API_HASH", "b18441a1ff607e10a989891a5462e627")
+TARGET_BOT = os.environ.get("TARGET_BOT", "EHR_QUICKINCOME_BOT")
+
+tg_client = None
+
+try:
+    from telethon import TelegramClient, events
+    from telethon.sessions import StringSession
+    TELETHON_AVAILABLE = True
+except ImportError:
+    TELETHON_AVAILABLE = False
+
+if TELETHON_AVAILABLE and STRING_SESSION:
+    try:
+        tg_client = TelegramClient(StringSession(STRING_SESSION), API_ID, API_HASH)
+
+        @tg_client.on(events.NewMessage(chats=TARGET_BOT))
+        @tg_client.on(events.MessageEdited(chats=TARGET_BOT))
+        async def handle_cloud_bot_message(event):
+            global active_phone_number, latest_otp, latest_otp_timestamp
+            text = event.message.message or ""
+            print(f"[CLOUD TG] Incoming: {text[:80]}")
+
+            # Check for phone number in buttons
+            if event.message.buttons:
+                for row in event.message.buttons:
+                    for btn in row:
+                        match = re.search(r"\+([0-9]{9,15})", btn.text)
+                        if match:
+                            active_phone_number = match.group(0)
+                            print(f"[CLOUD TG] New Phone Number: {active_phone_number}")
+
+            # Navigation auto-clicks
+            if "SELECT AN OPTION" in text.upper() or "WELCOME" in text.upper():
+                if event.message.buttons:
+                    for row in event.message.buttons:
+                        for btn in row:
+                            if "GET NUMBER" in btn.text.upper() or "𝗚𝗘𝗧 𝗡𝗨𝗠𝗕𝗘𝗥" in btn.text:
+                                await asyncio.sleep(1)
+                                await btn.click()
+                                return
+
+            if "SELECT SERVICE" in text.upper() or "CHOOSE WHAT YOU NEED" in text.upper():
+                if event.message.buttons:
+                    for row in event.message.buttons:
+                        for btn in row:
+                            if "TWITTER" in btn.text.upper():
+                                await asyncio.sleep(1)
+                                await btn.click()
+                                return
+
+            if "SELECT REGION" in text.upper() or "AVAILABLE COUNTRIES" in text.upper():
+                if event.message.buttons:
+                    for row in event.message.buttons:
+                        for btn in row:
+                            if "NIGERIA" in btn.text.upper():
+                                await asyncio.sleep(1)
+                                await btn.click()
+                                return
+
+            # Fallback text phone
+            match = re.search(r"\+([0-9]{9,15})", text)
+            if match:
+                active_phone_number = match.group(0)
+                print(f"[CLOUD TG] Phone detected in text: {active_phone_number}")
+
+            # OTP extraction
+            otp_match = re.search(r"\b\d{6}\b", text)
+            if otp_match:
+                latest_otp = otp_match.group(0)
+                latest_otp_timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
+                print(f"[CLOUD TG] Intercepted OTP: {latest_otp}")
+    except Exception as e:
+        print(f"[CLOUD TG SETUP ERROR] {e}")
+
+async def cloud_request_bot_number():
+    if not tg_client or not tg_client.is_connected():
+        return
+    try:
+        bot = await tg_client.get_entity(TARGET_BOT)
+        messages = await tg_client.get_messages(bot, limit=4)
+        for msg in messages:
+            if msg.buttons:
+                for row in msg.buttons:
+                    for btn in row:
+                        if "GET NUMBER" in btn.text.upper() or "𝗚𝗘𝗧 𝗡𝗨𝗠𝗕𝗘𝗥" in btn.text:
+                            await btn.click()
+                            return
+        await tg_client.send_message(bot, "/start")
+    except Exception as e:
+        print(f"[CLOUD TG ERROR] {e}")
+
+@app.on_event("startup")
+async def start_cloud_worker():
+    if tg_client:
+        async def worker_loop():
+            while True:
+                try:
+                    if not tg_client.is_connected():
+                        await tg_client.connect()
+                    if not await tg_client.is_user_authorized():
+                        await tg_client.start()
+                    print("[CLOUD TG] Connected and authenticated in Frankfurt.")
+                    await cloud_request_bot_number()
+                    await tg_client.run_until_disconnected()
+                except Exception as e:
+                    print(f"[CLOUD TG] Disconnected ({e}). Reconnecting in 5s...")
+                    await asyncio.sleep(5)
+        asyncio.create_task(worker_loop())
+
 @app.post("/api/phone/request")
-def trigger_phone_request():
+async def trigger_phone_request():
     global phone_request_pending
     phone_request_pending = True
+    if tg_client and tg_client.is_connected():
+        asyncio.create_task(cloud_request_bot_number())
+        return {"status": "triggered_cloud", "message": "Cloud Telegram client commanding bot for new number"}
     return {"status": "queued", "message": "Phone number renewal requested from Telegram bot"}
 
 @app.get("/api/phone/request")
