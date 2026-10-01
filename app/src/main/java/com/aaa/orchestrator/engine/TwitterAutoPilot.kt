@@ -68,29 +68,94 @@ class TwitterAutoPilot(
                 var lastStep = '';
                 var lastActionTime = 0;
 
-                function triggerNativeInput(el, val) {
+                function simulateClick(el) {
                     if (!el) return false;
-                    el.focus();
-                    var proto = window.HTMLInputElement.prototype;
-                    var set = Object.getOwnPropertyDescriptor(proto, 'value') ? Object.getOwnPropertyDescriptor(proto, 'value').set : null;
-                    if (set) {
-                        set.call(el, val);
-                    } else {
-                        el.value = val;
-                    }
-                    el.dispatchEvent(new Event('input', { bubbles: true }));
-                    el.dispatchEvent(new Event('change', { bubbles: true }));
+                    try {
+                        el.focus();
+                    } catch(e) {}
+                    try {
+                        var opts = { bubbles: true, cancelable: true, view: window };
+                        el.dispatchEvent(new MouseEvent('mousedown', opts));
+                        el.dispatchEvent(new MouseEvent('mouseup', opts));
+                        el.dispatchEvent(new MouseEvent('click', opts));
+                    } catch(e) {}
+                    try {
+                        el.click();
+                    } catch(e) {}
                     return true;
                 }
 
-                function clickButtonByText(candidates) {
-                    var buttons = document.querySelectorAll('button, div[role="button"]');
-                    for (var i = 0; i < buttons.length; i++) {
-                        var b = buttons[i];
-                        var text = (b.innerText || b.textContent || '').trim().toLowerCase();
+                function triggerNativeInput(el, val) {
+                    if (!el || !val) return false;
+                    try {
+                        el.focus();
+                        var proto = window.HTMLInputElement.prototype;
+                        var descriptor = Object.getOwnPropertyDescriptor(proto, 'value');
+                        if (descriptor && descriptor.set) {
+                            descriptor.set.call(el, val);
+                        } else {
+                            el.value = val;
+                        }
+                        el.dispatchEvent(new Event('input', { bubbles: true, cancelable: true }));
+                        el.dispatchEvent(new Event('change', { bubbles: true, cancelable: true }));
+                        try {
+                            el.dispatchEvent(new InputEvent('input', { bubbles: true, cancelable: true, inputType: 'insertText', data: val }));
+                        } catch(ie) {}
+                        el.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true }));
+                        el.dispatchEvent(new KeyboardEvent('keyup', { bubbles: true }));
+                        el.blur();
+                        return true;
+                    } catch(err) {
+                        return false;
+                    }
+                }
+
+                function triggerSelect(sel, val) {
+                    if (!sel) return false;
+                    try {
+                        sel.focus();
+                        var strVal = String(val);
+                        var descriptor = Object.getOwnPropertyDescriptor(window.HTMLSelectElement.prototype, 'value');
+                        if (descriptor && descriptor.set) {
+                            descriptor.set.call(sel, strVal);
+                        } else {
+                            sel.value = strVal;
+                        }
+                        sel.dispatchEvent(new Event('input', { bubbles: true, cancelable: true }));
+                        sel.dispatchEvent(new Event('change', { bubbles: true, cancelable: true }));
+                        sel.blur();
+                        return true;
+                    } catch(e) {
+                        return false;
+                    }
+                }
+
+                function clickButtonByText(candidates, exact) {
+                    // 1. Search buttons, links, div[role=button]
+                    var targets = document.querySelectorAll('button, div[role="button"], a[role="button"], a');
+                    for (var i = 0; i < targets.length; i++) {
+                        var el = targets[i];
+                        var text = (el.innerText || el.textContent || '').trim().toLowerCase();
                         for (var j = 0; j < candidates.length; j++) {
-                            if (text === candidates[j].toLowerCase()) {
-                                b.click();
+                            var cand = candidates[j].toLowerCase();
+                            if (exact ? (text === cand) : (text === cand || (text.indexOf(cand) !== -1 && text.length < cand.length + 35))) {
+                                simulateClick(el);
+                                return true;
+                            }
+                        }
+                    }
+
+                    // 2. Search inner spans/divs directly and click closest clickable ancestor
+                    var spans = document.querySelectorAll('span, div');
+                    for (var i = 0; i < spans.length; i++) {
+                        var el = spans[i];
+                        if (el.children.length > 2) continue;
+                        var text = (el.innerText || el.textContent || '').trim().toLowerCase();
+                        for (var j = 0; j < candidates.length; j++) {
+                            var cand = candidates[j].toLowerCase();
+                            if (text === cand || (text.indexOf(cand) !== -1 && text.length < cand.length + 25)) {
+                                var parentClickable = el.closest('button, div[role="button"], a[role="button"], a') || el;
+                                simulateClick(parentClickable);
                                 return true;
                             }
                         }
@@ -100,7 +165,7 @@ class TwitterAutoPilot(
 
                 function checkAutoPilot() {
                     var now = Date.now();
-                    if (now - lastActionTime < 1000) return;
+                    if (now - lastActionTime < 1100) return;
 
                     var url = window.location.href;
                     var pageText = document.body ? document.body.innerText : '';
@@ -133,70 +198,111 @@ class TwitterAutoPilot(
                         return;
                     }
 
-                    // 3. Step 1: Switch to Phone if Email is presented
-                    var usePhoneBtn = document.querySelectorAll('span, div[role="button"]');
-                    for (var i = 0; i < usePhoneBtn.length; i++) {
-                        if (usePhoneBtn[i].innerText && usePhoneBtn[i].innerText.indexOf('Use phone instead') !== -1) {
-                            usePhoneBtn[i].click();
-                            lastActionTime = now;
+                    // 3. Step 0: Landing Screen Selection ("See what's happening" / "Join X today")
+                    // In screenshot: Black button "Continue with phone", or "Sign up with phone", "Create account"
+                    var hasLandingPrompt = pageText.indexOf("See what's happening") !== -1 ||
+                                          pageText.indexOf('Join today') !== -1 ||
+                                          pageText.indexOf('Happening now') !== -1 ||
+                                          url.indexOf('signup') !== -1;
+
+                    var nameInput = document.querySelector('input[name="name"], input[autocomplete="name"], input[data-testid*="name"]');
+                    if (hasLandingPrompt && !nameInput) {
+                        var clickedLanding = clickButtonByText([
+                            'Continue with phone',
+                            'Sign up with phone',
+                            'Sign up with phone or email',
+                            'Create account'
+                        ], false);
+                        if (clickedLanding) {
+                            if (window.AndroidBridge) window.AndroidBridge.reportStep('Clicked Continue with phone');
+                            lastActionTime = now + 1200;
                             return;
                         }
                     }
 
-                    // 4. Step 1: Initial Signup Form
-                    var nameInput = document.querySelector('input[name="name"], input[autocomplete="name"], input[data-testid*="name"]');
+                    // 4. Step 1: Switch to Phone if Twitter defaulted to Email
+                    var usePhoneBtn = clickButtonByText(['Use phone instead'], false);
+                    if (usePhoneBtn) {
+                        if (window.AndroidBridge) window.AndroidBridge.reportStep('Switched to Phone input');
+                        lastActionTime = now + 800;
+                        return;
+                    }
+
+                    // 5. Step 1: Fill Name, Phone, and DOB
                     var phoneInput = document.querySelector('input[name="phone_number"], input[autocomplete="tel"], input[type="tel"]');
 
                     if (nameInput && (!nameInput.value || nameInput.value.length === 0)) {
                         triggerNativeInput(nameInput, window._apConfig.name);
                         if (window.AndroidBridge) window.AndroidBridge.reportStep('Filled Name: ' + window._apConfig.name);
-                        lastActionTime = now;
+                        lastActionTime = now + 300;
                     }
 
                     if (phoneInput && (!phoneInput.value || phoneInput.value.length === 0)) {
                         triggerNativeInput(phoneInput, window._apConfig.phone);
                         if (window.AndroidBridge) window.AndroidBridge.reportStep('Filled Phone: ' + window._apConfig.phone);
-                        lastActionTime = now;
+                        lastActionTime = now + 300;
                     }
 
                     // Fill DOB Selects
                     var selects = document.querySelectorAll('select');
                     if (selects.length >= 3) {
-                        if (!selects[0].value || selects[0].value === '0') {
-                            selects[0].value = window._apConfig.birthMonth.toString();
-                            selects[0].dispatchEvent(new Event('change', { bubbles: true }));
+                        var monthSel = selects[0];
+                        var daySel = selects[1];
+                        var yearSel = selects[2];
+
+                        if (!monthSel.value || monthSel.value === '0') {
+                            triggerSelect(monthSel, window._apConfig.birthMonth);
                         }
-                        if (!selects[1].value || selects[1].value === '0') {
-                            selects[1].value = window._apConfig.birthDay.toString();
-                            selects[1].dispatchEvent(new Event('change', { bubbles: true }));
+                        if (!daySel.value || daySel.value === '0') {
+                            triggerSelect(daySel, window._apConfig.birthDay);
                         }
-                        if (!selects[2].value || selects[2].value === '0') {
-                            selects[2].value = window._apConfig.birthYear.toString();
-                            selects[2].dispatchEvent(new Event('change', { bubbles: true }));
+                        if (!yearSel.value || yearSel.value === '0') {
+                            triggerSelect(yearSel, window._apConfig.birthYear);
                         }
                     }
 
-                    // Click Next on signup step if name and phone are filled
+                    // Click Next on signup step once fields are populated
                     if (nameInput && phoneInput && nameInput.value && phoneInput.value && lastStep !== 'signup_next') {
-                        var clicked = clickButtonByText(['Next']);
-                        if (clicked) {
+                        var nextClicked = clickButtonByText(['Next'], true);
+                        if (nextClicked) {
                             lastStep = 'signup_next';
-                            lastActionTime = now + 1000;
-                            if (window.AndroidBridge) window.AndroidBridge.reportStep('Clicked Next on Signup');
+                            lastActionTime = now + 1200;
+                            if (window.AndroidBridge) window.AndroidBridge.reportStep('Submitted Step 1');
                             return;
                         }
                     }
 
-                    // Confirm 'Sign up' dialog if shown
-                    if (pageText.indexOf('Create your account') !== -1 || pageText.indexOf('Customize your experience') !== -1) {
-                        var signClicked = clickButtonByText(['Next', 'Sign up', 'Sign Up']);
+                    // 6. Step 2 & 3: Customize experience & Review screens
+                    if (pageText.indexOf('Customize your experience') !== -1) {
+                        var customNext = clickButtonByText(['Next'], true);
+                        if (customNext) {
+                            lastActionTime = now + 1000;
+                            return;
+                        }
+                    }
+
+                    if (pageText.indexOf('Create your account') !== -1 && lastStep !== 'signup_clicked') {
+                        var signClicked = clickButtonByText(['Sign up', 'Sign Up'], true);
                         if (signClicked) {
+                            lastStep = 'signup_clicked';
+                            lastActionTime = now + 1000;
+                            if (window.AndroidBridge) window.AndroidBridge.reportStep('Clicked Sign up');
+                            return;
+                        }
+                    }
+
+                    // 7. Step 3.5: Phone Confirmation Dialog ("Verify phone")
+                    // Twitter shows popup: "We'll text your verification code to... Standard SMS fees may apply."
+                    if (pageText.indexOf('Verify phone') !== -1 || pageText.indexOf('text your verification code') !== -1) {
+                        var okClicked = clickButtonByText(['OK', 'Verify'], true);
+                        if (okClicked) {
+                            if (window.AndroidBridge) window.AndroidBridge.reportStep('Confirmed Verify Phone dialog');
                             lastActionTime = now + 1000;
                             return;
                         }
                     }
 
-                    // 5. Step 4: OTP Verification Screen
+                    // 8. Step 4: OTP Verification Screen
                     if (window._apConfig.otp && (pageText.indexOf('We sent you a code') !== -1 || pageText.indexOf('verification code') !== -1)) {
                         var otpInput = document.querySelector('input[name="verfication_code"], input[name="verification_code"], input[autocomplete="one-time-code"], input[name="code"], input[inputmode="numeric"], input[data-testid="ocfEnterTextTextInput"]');
                         if (otpInput && (!otpInput.value || otpInput.value.length === 0)) {
@@ -204,13 +310,13 @@ class TwitterAutoPilot(
                             if (window.AndroidBridge) window.AndroidBridge.reportStep('Filled OTP: ' + window._apConfig.otp);
                             lastActionTime = now + 800;
                             setTimeout(function() {
-                                clickButtonByText(['Next', 'Verify']);
+                                clickButtonByText(['Next', 'Verify'], true);
                             }, 500);
                             return;
                         }
                     }
 
-                    // 6. Step 5: Password Screen
+                    // 9. Step 5: Password Screen
                     if (pageText.indexOf("You'll need a password") !== -1 || pageText.indexOf('Enter a password') !== -1) {
                         var passInput = document.querySelector('input[name="password"], input[type="password"]');
                         if (passInput && (!passInput.value || passInput.value.length === 0)) {
@@ -218,25 +324,26 @@ class TwitterAutoPilot(
                             if (window.AndroidBridge) window.AndroidBridge.reportStep('Filled Password');
                             lastActionTime = now + 800;
                             setTimeout(function() {
-                                clickButtonByText(['Next', 'Sign up']);
+                                clickButtonByText(['Next', 'Sign up'], true);
                             }, 500);
                             return;
                         }
                     }
 
-                    // 7. Post-Signup Onboarding Skips
+                    // 10. Post-Signup Onboarding Skips
                     if (pageText.indexOf('Pick a profile picture') !== -1 ||
                         pageText.indexOf('What should we call you') !== -1 ||
                         pageText.indexOf('Turn on notifications') !== -1 ||
-                        pageText.indexOf('What do you want to see on X') !== -1) {
-                        clickButtonByText(['Skip for now', 'Not now', 'Skip']);
+                        pageText.indexOf('What do you want to see on X') !== -1 ||
+                        pageText.indexOf('Follow 1 or more') !== -1) {
+                        clickButtonByText(['Skip for now', 'Not now', 'Skip', 'Next'], true);
                         lastActionTime = now + 1000;
                     }
                 }
 
                 // Run immediately and setup interval observer
                 checkAutoPilot();
-                setInterval(checkAutoPilot, 1200);
+                setInterval(checkAutoPilot, 1000);
 
                 var observer = new MutationObserver(function() {
                     checkAutoPilot();

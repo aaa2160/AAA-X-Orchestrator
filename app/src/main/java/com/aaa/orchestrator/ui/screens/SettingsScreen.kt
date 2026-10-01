@@ -82,12 +82,12 @@ fun SettingsScreen(
                         Spacer(modifier = Modifier.width(10.dp))
                         Column {
                             Text(
-                                text = "System Permissions (Macroify Setup)",
+                                text = "Optional Device Tools",
                                 style = MaterialTheme.typography.titleMedium,
                                 color = TextSlateDark
                             )
                             Text(
-                                text = "Required for 2nr OTP interception & background services",
+                                text = "Cloud automation works 100% without these. Only needed for legacy local 2nr overlays",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = TextMuted
                             )

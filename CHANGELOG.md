@@ -2,7 +2,30 @@
 
 All notable changes and architectural configurations for this project are documented here.
 
-## [1.9.1] - 2026-10-01
+## [2.0.0] - 2026-10-01
+
+### Added & Enhanced
+- **Chrome-Style Professional Browser Redesign ([`BrowserScreen.kt`](file:///root/project/AAAX/app/src/main/java/com/aaa/orchestrator/ui/screens/BrowserScreen.kt))**:
+  - Eliminated the cluttered 4-row header layout, replacing it with an ultra-clean, minimalist Chrome-style Omnibox (56dp) with SSL lock, tab counter badge, and overflow menu.
+  - Added ultra-thin smooth loading progress bar beneath the Omnibox.
+  - Implemented Chrome-style Tab Switcher modal and overflow menu with Desktop Site toggle, History, Bookmarks, and Privacy indicators.
+- **Multi-WebView Tab Container & Zero-Reset Architecture**:
+  - Replaced the single-WebView reload mechanism with a multi-WebView container (`FrameLayout` pool).
+  - Each tab now maintains its own isolated, persistent `WebView` instance in memory.
+  - Switching tabs simply alters visibility (`VISIBLE` / `GONE`), completely preserving DOM inputs, scroll positions, typed text, and session state without resetting or reloading the page.
+- **Strict Geolocation Privacy Protection**:
+  - Configured `WebChromeClient.onGeolocationPermissionsShowPrompt` to strictly deny physical GPS and network location queries from websites.
+  - Injected early JavaScript stealth spoof script that overrides `navigator.geolocation.getCurrentPosition` and `navigator.geolocation.watchPosition` to return Frankfurt, Germany gateway coordinates (`50.1109, 8.6821`), preventing physical location leakage.
+- **Twitter "Continue with phone" Gatekeeper & Auto-Pilot Fix ([`TwitterAutoPilot.kt`](file:///root/project/AAAX/app/src/main/java/com/aaa/orchestrator/engine/TwitterAutoPilot.kt))**:
+  - Added automatic detection and click simulation for Twitter's initial landing view ("See what's happening" / "Join today"), clicking the prominent black "Continue with phone" button.
+  - Added fallback handler to detect and click "Use phone instead" if Twitter defaults to email.
+  - Added native prototype value setters with `InputEvent`, `change`, and keyboard event dispatches to guarantee React Native for Web form synchronization.
+  - Added automatic confirmation for Twitter's "Verify phone" SMS dispatch dialog ("OK" / "Verify").
+- **Streamlined Device Permissions ([`SettingsScreen.kt`](file:///root/project/AAAX/app/src/main/java/com/aaa/orchestrator/ui/screens/SettingsScreen.kt))**:
+  - Clarified system permissions (Accessibility, Notification Listener, Overlay) as 100% optional power-user features. The app runs out of the box with zero required system permissions using cloud worker integration.
+- **Dynamic CI/CD Pipeline Fix ([`android_build.yml`](file:///root/project/AAAX/.github/workflows/android_build.yml))**:
+  - Updated release step with `tag_name: v2.0.${{ github.run_number }}` and `continue-on-error: true` to prevent tag collisions.
+
 
 ### Fixed & Enhanced
 - **Direct APK Deployment to Phone Download Folder**:

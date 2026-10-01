@@ -8,17 +8,19 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Environment
+import android.view.View
 import android.view.ViewGroup
 import android.webkit.*
+import android.widget.FrameLayout
 import android.widget.Toast
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
@@ -34,12 +36,13 @@ import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
+import com.aaa.orchestrator.data.model.OrchestratorState
 import com.aaa.orchestrator.engine.AccountProfileGenerator
 import com.aaa.orchestrator.engine.AdBlockEngine
-import com.aaa.orchestrator.engine.AppLauncher
 import com.aaa.orchestrator.engine.FaceVerificationNotifier
 import com.aaa.orchestrator.engine.OrchestratorEngine
 import com.aaa.orchestrator.engine.TwitterAutoPilot
@@ -47,8 +50,6 @@ import com.aaa.orchestrator.ui.theme.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 import timber.log.Timber
-import java.io.ByteArrayInputStream
-import java.net.URLEncoder
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -83,23 +84,30 @@ fun BrowserScreen(
     // Navigation & Web State
     var currentUrl by remember { mutableStateOf(activeUrl) }
     var inputUrl by remember { mutableStateOf(activeUrl) }
-    var pageTitle by remember { mutableStateOf("Browser") }
+    var pageTitle by remember { mutableStateOf("X Signup") }
     var pageProgress by remember { mutableStateOf(0) }
     var isLoading by remember { mutableStateOf(false) }
     var canGoBack by remember { mutableStateOf(false) }
     var canGoForward by remember { mutableStateOf(false) }
     var isDesktopMode by remember { mutableStateOf(false) }
-    var isIncognitoMode by remember { mutableStateOf(false) }
-    var webViewInstance by remember { mutableStateOf<WebView?>(null) }
+    var showMenu by remember { mutableStateOf(false) }
 
-    // Professional Browser Tools
-    var showFindInPage by remember { mutableStateOf(false) }
-    var findQuery by remember { mutableStateOf("") }
+    // Tools & Bookmarks
     var showBookmarksHistory by remember { mutableStateOf(false) }
-    var bookmarks by remember { mutableStateOf(mutableSetOf("https://x.com", "https://x.com/i/flow/signup", "https://www.google.com")) }
+    var bookmarks by remember {
+        mutableStateOf(
+            mutableSetOf(
+                "https://x.com/i/flow/signup",
+                "https://x.com",
+                "https://www.google.com",
+                "https://duckduckgo.com"
+            )
+        )
+    }
     var history by remember { mutableStateOf(mutableListOf<HistoryItem>()) }
 
-    // Collapsible Workflow HUD & Phone editing
+    // Sleek Auto-Pilot HUD State
+    var isHudVisible by remember { mutableStateOf(true) }
     var isHudExpanded by remember { mutableStateOf(false) }
     var showPhoneEditDialog by remember { mutableStateOf(false) }
     var phoneInputText by remember { mutableStateOf("") }
@@ -117,6 +125,43 @@ fun BrowserScreen(
 
     val currentProfileName = remember { mutableStateOf(AccountProfileGenerator.generateFullName()) }
     val currentBirthDate = remember { mutableStateOf(AccountProfileGenerator.generateBirthDate()) }
+
+    // Active WebView reference & Container reference for multi-tab management
+    var activeWebView by remember { mutableStateOf<WebView?>(null) }
+    val webViewPool = remember { mutableMapOf<String, WebView>() }
+    var containerLayout by remember { mutableStateOf<FrameLayout?>(null) }
+
+    // AdBlock Engine
+    val adBlockEngine = remember { AdBlockEngine(context) }
+
+    // Geolocation Privacy Spoof Script (Frankfurt Gateway)
+    val geoPrivacyScript = """
+        (function() {
+            var fakeCoords = {
+                latitude: 50.1109,
+                longitude: 8.6821,
+                accuracy: 35.0,
+                altitude: null,
+                altitudeAccuracy: null,
+                heading: null,
+                speed: null
+            };
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition = function(success, error, options) {
+                    if (typeof success === 'function') {
+                        success({ coords: fakeCoords, timestamp: Date.now() });
+                    }
+                };
+                navigator.geolocation.watchPosition = function(success, error, options) {
+                    if (typeof success === 'function') {
+                        success({ coords: fakeCoords, timestamp: Date.now() });
+                    }
+                    return 101;
+                };
+                navigator.geolocation.clearWatch = function(id) {};
+            }
+        })();
+    """.trimIndent()
 
     // Auto-pilot bridge and notification dispatcher
     val autoPilot = remember {
@@ -140,104 +185,958 @@ fun BrowserScreen(
         )
     }
 
-    // Auto-inject incoming OTP into Twitter signup form instantly and advance
-    LaunchedEffect(latestOtp) {
-        if (!latestOtp.isNullOrBlank()) {
-            injectValueIntoInput(webViewInstance, latestOtp!!)
-            Toast.makeText(context, "Auto-filled verification code: $latestOtp", Toast.LENGTH_SHORT).show()
-
-            // Run autopilot to trigger Next/Verify
-            val script = TwitterAutoPilot.buildAutoPilotScript(
-                name = currentProfileName.value,
-                phone = phoneNumber,
-                birthMonth = currentBirthDate.value.month,
-                birthDay = currentBirthDate.value.day,
-                birthYear = currentBirthDate.value.year,
-                password = password,
-                otp = latestOtp
-            )
-            webViewInstance?.evaluateJavascript(script, null)
-        }
-    }
-
-    // Auto-pilot step execution when URL changes or phone number updates
-    LaunchedEffect(currentUrl, phoneNumber) {
-        if (currentUrl.contains("signup") || currentUrl.contains("flow") || currentUrl.contains("challenge")) {
-            kotlinx.coroutines.delay(1200)
-            val script = TwitterAutoPilot.buildAutoPilotScript(
-                name = currentProfileName.value,
-                phone = phoneNumber,
-                birthMonth = currentBirthDate.value.month,
-                birthDay = currentBirthDate.value.day,
-                birthYear = currentBirthDate.value.year,
-                password = password,
-                otp = latestOtp
-            )
-            webViewInstance?.evaluateJavascript(script, null)
-        }
-    }
-
     val mobileUserAgent = "Mozilla/5.0 (Linux; Android 11; SM-A305F) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Mobile Safari/537.36"
     val desktopUserAgent = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36"
 
-    val adBlockEngine = remember { AdBlockEngine(context) }
+    // Helper to evaluate Twitter AutoPilot script on the active WebView
+    fun runAutoPilotOnActiveTab() {
+        val script = TwitterAutoPilot.buildAutoPilotScript(
+            name = currentProfileName.value,
+            phone = phoneNumber,
+            birthMonth = currentBirthDate.value.month,
+            birthDay = currentBirthDate.value.day,
+            birthYear = currentBirthDate.value.year,
+            password = password,
+            otp = latestOtp
+        )
+        activeWebView?.evaluateJavascript(script, null)
+    }
 
-    fun navigateTo(rawQuery: String) {
-        val trimmed = rawQuery.trim()
-        if (trimmed.isEmpty()) return
-        val destination = if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
-            trimmed
-        } else if (trimmed.contains(".") && !trimmed.contains(" ")) {
-            "https://$trimmed"
-        } else {
-            "https://www.google.com/search?q=" + URLEncoder.encode(trimmed, "UTF-8")
-        }
-        inputUrl = destination
-        currentUrl = destination
-        webViewInstance?.loadUrl(destination)
-
-        // Update active tab info
-        if (activeTabIndex in tabs.indices) {
-            val updated = tabs.toMutableList()
-            updated[activeTabIndex] = updated[activeTabIndex].copy(url = destination)
-            tabs = updated
+    // Auto-inject incoming OTP into Twitter signup form instantly and advance
+    LaunchedEffect(latestOtp) {
+        if (!latestOtp.isNullOrBlank()) {
+            injectValueIntoInput(activeWebView, latestOtp!!)
+            Toast.makeText(context, "Auto-filled verification code: $latestOtp", Toast.LENGTH_SHORT).show()
+            runAutoPilotOnActiveTab()
         }
     }
 
-    fun shareCurrentPage() {
-        try {
-            val shareIntent = Intent(Intent.ACTION_SEND).apply {
-                type = "text/plain"
-                putExtra(Intent.EXTRA_SUBJECT, pageTitle)
-                putExtra(Intent.EXTRA_TEXT, currentUrl)
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+    // Function to create and configure a persistent WebView for a specific tab
+    fun createConfiguredWebView(ctx: Context, tab: BrowserTab): WebView {
+        return WebView(ctx).apply {
+            layoutParams = FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT
+            )
+
+            settings.apply {
+                javaScriptEnabled = true
+                domStorageEnabled = true
+                databaseEnabled = true
+                useWideViewPort = true
+                loadWithOverviewMode = true
+                setSupportZoom(true)
+                builtInZoomControls = true
+                displayZoomControls = false
+                javaScriptCanOpenWindowsAutomatically = true
+                mediaPlaybackRequiresUserGesture = false
+                allowFileAccess = true
+                allowContentAccess = true
+                cacheMode = WebSettings.LOAD_DEFAULT
+                mixedContentMode = WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE
+                userAgentString = if (isDesktopMode) desktopUserAgent else mobileUserAgent
             }
-            context.startActivity(Intent.createChooser(shareIntent, "Share Page").apply {
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            })
-        } catch (e: Exception) {
-            Toast.makeText(context, "Could not open share menu", Toast.LENGTH_SHORT).show()
+
+            // Enable and manage cookies
+            val cookieManager = CookieManager.getInstance()
+            cookieManager.setAcceptCookie(true)
+            cookieManager.setAcceptThirdPartyCookies(this, true)
+
+            // Connect JavaScript Bridge
+            addJavascriptInterface(autoPilot, "AndroidBridge")
+
+            // Integrated Download Manager
+            setDownloadListener { url, userAgent, contentDisposition, mimetype, _ ->
+                try {
+                    val request = DownloadManager.Request(Uri.parse(url)).apply {
+                        setMimeType(mimetype)
+                        val cookies = CookieManager.getInstance().getCookie(url)
+                        addRequestHeader("cookie", cookies)
+                        addRequestHeader("User-Agent", userAgent)
+                        setDescription("Downloading file...")
+                        setTitle(URLUtil.guessFileName(url, contentDisposition, mimetype))
+                        setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
+                        setDestinationInExternalPublicDir(
+                            Environment.DIRECTORY_DOWNLOADS,
+                            URLUtil.guessFileName(url, contentDisposition, mimetype)
+                        )
+                    }
+                    val dm = ctx.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
+                    dm.enqueue(request)
+                    Toast.makeText(ctx, "Download started...", Toast.LENGTH_SHORT).show()
+                } catch (e: Exception) {
+                    Timber.e(e, "Error initiating download")
+                    Toast.makeText(ctx, "Download failed: ${e.message}", Toast.LENGTH_SHORT).show()
+                }
+            }
+
+            // Chrome client for progress, titles, alerts, and strict location privacy
+            webChromeClient = object : WebChromeClient() {
+                override fun onProgressChanged(view: WebView?, newProgress: Int) {
+                    if (activeWebView == view) {
+                        pageProgress = newProgress
+                        isLoading = newProgress < 100
+                    }
+                }
+
+                override fun onReceivedTitle(view: WebView?, title: String?) {
+                    if (title != null) {
+                        if (activeWebView == view) {
+                            pageTitle = title
+                        }
+                        val index = tabs.indexOfFirst { it.id == tab.id }
+                        if (index != -1) {
+                            val updated = tabs.toMutableList()
+                            updated[index] = updated[index].copy(title = title)
+                            tabs = updated
+                        }
+                    }
+                }
+
+                override fun onGeolocationPermissionsShowPrompt(
+                    origin: String?,
+                    callback: GeolocationPermissions.Callback?
+                ) {
+                    // Strict Location Privacy: Deny physical GPS / network location disclosure
+                    callback?.invoke(origin, false, false)
+                }
+
+                override fun onJsAlert(view: WebView?, url: String?, message: String?, result: JsResult?): Boolean {
+                    Toast.makeText(ctx, message ?: "", Toast.LENGTH_SHORT).show()
+                    result?.confirm()
+                    return true
+                }
+
+                override fun onJsConfirm(view: WebView?, url: String?, message: String?, result: JsResult?): Boolean {
+                    result?.confirm()
+                    return true
+                }
+            }
+
+            // Client with Titanium AdBlock and AutoPilot injection
+            webViewClient = object : WebViewClient() {
+                override fun shouldInterceptRequest(
+                    view: WebView?,
+                    request: WebResourceRequest?
+                ): WebResourceResponse? {
+                    if (adBlockEngine.shouldBlock(request)) {
+                        val host = request?.url?.host ?: ""
+                        if (host.contains("analytic") || host.contains("telemetry") || host.contains("scorecard") || host.contains("tracker") || host.contains("clarity")) {
+                            blockedTrackersCount++
+                        } else {
+                            blockedAdsCount++
+                        }
+                        return adBlockEngine.createEmptyResponse()
+                    }
+                    return super.shouldInterceptRequest(view, request)
+                }
+
+                override fun onPageStarted(view: WebView?, url: String?, favicon: android.graphics.Bitmap?) {
+                    super.onPageStarted(view, url, favicon)
+                    if (activeWebView == view) {
+                        isLoading = true
+                        if (url != null) {
+                            currentUrl = url
+                            inputUrl = url
+                        }
+                    }
+                    // Inject location privacy spoof early
+                    view?.evaluateJavascript(geoPrivacyScript, null)
+                }
+
+                override fun onPageFinished(view: WebView?, url: String?) {
+                    super.onPageFinished(view, url)
+                    if (activeWebView == view) {
+                        isLoading = false
+                        if (url != null) {
+                            currentUrl = url
+                            inputUrl = url
+                            history.add(HistoryItem(url = url, title = pageTitle))
+                        }
+                        canGoBack = view?.canGoBack() == true
+                        canGoForward = view?.canGoForward() == true
+                    }
+
+                    // Apply cosmetic ad hiding
+                    adBlockEngine.injectCosmeticAdHiding(view)
+
+                    // Inject location privacy spoof again for SPA navigation
+                    view?.evaluateJavascript(geoPrivacyScript, null)
+
+                    // Inject Twitter AutoPilot if on signup/flow/challenge
+                    if (url != null && (url.contains("signup") || url.contains("flow") || url.contains("challenge") || url.contains("x.com"))) {
+                        val script = TwitterAutoPilot.buildAutoPilotScript(
+                            name = currentProfileName.value,
+                            phone = phoneNumber,
+                            birthMonth = currentBirthDate.value.month,
+                            birthDay = currentBirthDate.value.day,
+                            birthYear = currentBirthDate.value.year,
+                            password = password,
+                            otp = latestOtp
+                        )
+                        view?.evaluateJavascript(script, null)
+                    }
+                }
+            }
+
+            loadUrl(tab.url)
         }
     }
 
-    // Phone Edit Dialog
+    // Function to switch active tab WITHOUT reloading page state
+    fun switchTab(newIndex: Int) {
+        if (newIndex in tabs.indices) {
+            val oldTab = tabs.getOrNull(activeTabIndex)
+            val newTab = tabs[newIndex]
+
+            // Hide old webview
+            if (oldTab != null) {
+                webViewPool[oldTab.id]?.visibility = View.GONE
+            }
+
+            // Get or create new webview
+            val newWebView = webViewPool[newTab.id] ?: run {
+                val created = createConfiguredWebView(context, newTab)
+                webViewPool[newTab.id] = created
+                containerLayout?.addView(created)
+                created
+            }
+
+            newWebView.visibility = View.VISIBLE
+            newWebView.bringToFront()
+
+            activeTabIndex = newIndex
+            activeWebView = newWebView
+            currentUrl = newWebView.url ?: newTab.url
+            inputUrl = currentUrl
+            pageTitle = newWebView.title ?: newTab.title
+            canGoBack = newWebView.canGoBack()
+            canGoForward = newWebView.canGoForward()
+            isLoading = false
+        }
+    }
+
+    // Function to add a new tab
+    fun addNewTab(url: String = "https://x.com/i/flow/signup") {
+        val newTab = BrowserTab(url = url, title = "New Tab")
+        tabs = tabs + newTab
+        switchTab(tabs.size - 1)
+        showTabSwitcher = false
+    }
+
+    // Function to close a tab
+    fun closeTab(index: Int) {
+        if (tabs.size <= 1) {
+            // Keep at least one tab open
+            val tab = tabs[0]
+            tab.url = "https://x.com/i/flow/signup"
+            tab.title = "X Signup"
+            webViewPool[tab.id]?.loadUrl(tab.url)
+            return
+        }
+
+        val closingTab = tabs[index]
+        val webViewToDestroy = webViewPool.remove(closingTab.id)
+        containerLayout?.removeView(webViewToDestroy)
+        webViewToDestroy?.destroy()
+
+        val updatedTabs = tabs.toMutableList()
+        updatedTabs.removeAt(index)
+        tabs = updatedTabs
+
+        val nextIndex = when {
+            activeTabIndex >= tabs.size -> tabs.size - 1
+            activeTabIndex > index -> activeTabIndex - 1
+            else -> activeTabIndex
+        }
+        switchTab(nextIndex)
+    }
+
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
+    ) {
+        // ==========================================
+        // 1. PROFESSIONAL CHROME-STYLE TOP APP BAR
+        // ==========================================
+        Surface(
+            color = MaterialTheme.colorScheme.surface,
+            tonalElevation = 2.dp,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 8.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // Home Button
+                IconButton(
+                    onClick = {
+                        activeWebView?.loadUrl("https://x.com/i/flow/signup")
+                    },
+                    modifier = Modifier.size(36.dp)
+                ) {
+                    Icon(
+                        Icons.Default.Home,
+                        contentDescription = "Home",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+
+                // Chrome-like Pill Omnibox
+                Surface(
+                    shape = RoundedCornerShape(22.dp),
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.65f),
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(42.dp)
+                        .padding(horizontal = 4.dp)
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(horizontal = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        // SSL Lock Security Icon
+                        Icon(
+                            imageVector = if (currentUrl.startsWith("https")) Icons.Default.Lock else Icons.Default.Language,
+                            contentDescription = "Security",
+                            tint = if (currentUrl.startsWith("https")) SuccessGreen else MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(15.dp)
+                        )
+
+                        Spacer(modifier = Modifier.width(6.dp))
+
+                        // URL / Search Input Field
+                        TextField(
+                            value = inputUrl,
+                            onValueChange = { inputUrl = it },
+                            placeholder = {
+                                Text(
+                                    text = "Search or type URL",
+                                    fontSize = 13.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                                    maxLines = 1
+                                )
+                            },
+                            singleLine = true,
+                            textStyle = LocalTextStyle.current.copy(
+                                fontSize = 13.sp,
+                                color = MaterialTheme.colorScheme.onSurface
+                            ),
+                            colors = TextFieldDefaults.colors(
+                                focusedContainerColor = Color.Transparent,
+                                unfocusedContainerColor = Color.Transparent,
+                                focusedIndicatorColor = Color.Transparent,
+                                unfocusedIndicatorColor = Color.Transparent
+                            ),
+                            keyboardOptions = KeyboardOptions(
+                                keyboardType = KeyboardType.Uri,
+                                imeAction = ImeAction.Go
+                            ),
+                            keyboardActions = KeyboardActions(
+                                onGo = {
+                                    focusManager.clearFocus()
+                                    val formatted = when {
+                                        inputUrl.startsWith("http://") || inputUrl.startsWith("https://") -> inputUrl
+                                        inputUrl.contains(".") && !inputUrl.contains(" ") -> "https://$inputUrl"
+                                        else -> "https://www.google.com/search?q=" + java.net.URLEncoder.encode(inputUrl, "UTF-8")
+                                    }
+                                    activeWebView?.loadUrl(formatted)
+                                }
+                            ),
+                            modifier = Modifier.weight(1f)
+                        )
+
+                        // Clear or Refresh Button inside Omnibox
+                        if (isLoading) {
+                            IconButton(
+                                onClick = { activeWebView?.stopLoading() },
+                                modifier = Modifier.size(28.dp)
+                            ) {
+                                Icon(
+                                    Icons.Default.Close,
+                                    contentDescription = "Stop",
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            }
+                        } else {
+                            IconButton(
+                                onClick = { activeWebView?.reload() },
+                                modifier = Modifier.size(28.dp)
+                            ) {
+                                Icon(
+                                    Icons.Default.Refresh,
+                                    contentDescription = "Reload",
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+
+                // Chrome-Style Tab Counter Badge
+                Box(
+                    contentAlignment = Alignment.Center,
+                    modifier = Modifier
+                        .padding(horizontal = 4.dp)
+                        .size(28.dp)
+                        .border(
+                            width = 1.8.dp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            shape = RoundedCornerShape(7.dp)
+                        )
+                        .clickable { showTabSwitcher = true }
+                ) {
+                    Text(
+                        text = tabs.size.toString(),
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+
+                // 3-Dots Overflow Menu
+                Box {
+                    IconButton(
+                        onClick = { showMenu = true },
+                        modifier = Modifier.size(36.dp)
+                    ) {
+                        Icon(
+                            Icons.Default.MoreVert,
+                            contentDescription = "Menu",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+
+                    // Chrome Overflow Menu Dropdown
+                    DropdownMenu(
+                        expanded = showMenu,
+                        onDismissRequest = { showMenu = false }
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text("New tab") },
+                            leadingIcon = { Icon(Icons.Default.Add, contentDescription = null) },
+                            onClick = {
+                                showMenu = false
+                                addNewTab("https://x.com/i/flow/signup")
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = { Text(if (isHudVisible) "Hide Auto-Pilot HUD" else "Show Auto-Pilot HUD") },
+                            leadingIcon = { Icon(Icons.Default.SmartToy, contentDescription = null) },
+                            onClick = {
+                                showMenu = false
+                                isHudVisible = !isHudVisible
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("History") },
+                            leadingIcon = { Icon(Icons.Default.History, contentDescription = null) },
+                            onClick = {
+                                showMenu = false
+                                showBookmarksHistory = true
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Bookmarks") },
+                            leadingIcon = { Icon(Icons.Default.BookmarkBorder, contentDescription = null) },
+                            onClick = {
+                                showMenu = false
+                                showBookmarksHistory = true
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text("Desktop site")
+                                    Checkbox(
+                                        checked = isDesktopMode,
+                                        onCheckedChange = { checked ->
+                                            isDesktopMode = checked
+                                            activeWebView?.settings?.userAgentString = if (checked) desktopUserAgent else mobileUserAgent
+                                            activeWebView?.reload()
+                                            showMenu = false
+                                        }
+                                    )
+                                }
+                            },
+                            leadingIcon = { Icon(Icons.Default.DesktopWindows, contentDescription = null) },
+                            onClick = {
+                                isDesktopMode = !isDesktopMode
+                                activeWebView?.settings?.userAgentString = if (isDesktopMode) desktopUserAgent else mobileUserAgent
+                                activeWebView?.reload()
+                                showMenu = false
+                            }
+                        )
+                        HorizontalDivider()
+                        DropdownMenuItem(
+                            text = { Text("Privacy: Frankfurt Gateway") },
+                            leadingIcon = { Icon(Icons.Default.Shield, contentDescription = null, tint = SuccessGreen) },
+                            onClick = {
+                                showMenu = false
+                                Toast.makeText(context, "Exact GPS blocked. Spoofed to Frankfurt, Germany gateway.", Toast.LENGTH_LONG).show()
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Blocked: $blockedAdsCount ads") },
+                            leadingIcon = { Icon(Icons.Default.Block, contentDescription = null, tint = PrimaryBlue) },
+                            onClick = {
+                                showMenu = false
+                                Toast.makeText(context, "Titanium AdBlocker: $blockedAdsCount ads, $blockedTrackersCount trackers blocked.", Toast.LENGTH_SHORT).show()
+                            }
+                        )
+                    }
+                }
+            }
+        }
+
+        // ==========================================
+        // 2. ULTRA-THIN SMOOTH LOADING PROGRESS BAR
+        // ==========================================
+        if (isLoading) {
+            LinearProgressIndicator(
+                progress = { pageProgress / 100f },
+                color = PrimaryBlue,
+                trackColor = Color.Transparent,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(2.5.dp)
+            )
+        }
+
+        // ==========================================
+        // 3. SLEEK COLLAPSIBLE AUTO-PILOT COMPANION
+        // ==========================================
+        AnimatedVisibility(visible = isHudVisible) {
+            Surface(
+                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                tonalElevation = 1.dp,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 10.dp, vertical = 5.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        // Status & Active Phone Chip
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier
+                                .weight(1f)
+                                .clickable { isHudExpanded = !isHudExpanded }
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(8.dp)
+                                    .background(SuccessGreen, CircleShape)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = "Auto-Pilot Active",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = SuccessGreen
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = phoneNumber,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                        }
+
+                        // OTP badge if available
+                        if (!latestOtp.isNullOrBlank()) {
+                            Surface(
+                                shape = RoundedCornerShape(6.dp),
+                                color = SoftGreenTile,
+                                modifier = Modifier
+                                    .padding(end = 6.dp)
+                                    .clickable {
+                                        injectValueIntoInput(activeWebView, latestOtp!!)
+                                        runAutoPilotOnActiveTab()
+                                    }
+                            ) {
+                                Text(
+                                    text = "OTP: $latestOtp",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = SuccessGreen,
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                )
+                            }
+                        }
+
+                        // Quick 1-Tap Trigger AutoPilot Button
+                        FilledTonalButton(
+                            onClick = {
+                                runAutoPilotOnActiveTab()
+                                Toast.makeText(context, "Auto-Pilot scan dispatched", Toast.LENGTH_SHORT).show()
+                            },
+                            shape = RoundedCornerShape(8.dp),
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                            modifier = Modifier.height(28.dp)
+                        ) {
+                            Text("Fill Form", fontSize = 11.sp, fontWeight = FontWeight.Medium)
+                        }
+
+                        Spacer(modifier = Modifier.width(4.dp))
+
+                        // Expand / Collapse Chevron
+                        IconButton(
+                            onClick = { isHudExpanded = !isHudExpanded },
+                            modifier = Modifier.size(24.dp)
+                        ) {
+                            Icon(
+                                imageVector = if (isHudExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                                contentDescription = "Expand",
+                                modifier = Modifier.size(16.dp),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+
+                    // Expanded Controls Panel
+                    if (isHudExpanded) {
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            // Copy Phone
+                            OutlinedButton(
+                                onClick = {
+                                    copyToClipboard(context, "Phone", phoneNumber)
+                                },
+                                shape = RoundedCornerShape(8.dp),
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(30.dp)
+                            ) {
+                                Icon(Icons.Default.ContentCopy, contentDescription = null, modifier = Modifier.size(12.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("Copy Phone", fontSize = 10.sp)
+                            }
+
+                            // Edit Phone
+                            OutlinedButton(
+                                onClick = {
+                                    phoneInputText = phoneNumber
+                                    showPhoneEditDialog = true
+                                },
+                                shape = RoundedCornerShape(8.dp),
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(30.dp)
+                            ) {
+                                Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(12.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("Edit Phone", fontSize = 10.sp)
+                            }
+
+                            // Fill Password
+                            OutlinedButton(
+                                onClick = {
+                                    injectValueIntoInput(activeWebView, password)
+                                    runAutoPilotOnActiveTab()
+                                },
+                                shape = RoundedCornerShape(8.dp),
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(30.dp)
+                            ) {
+                                Icon(Icons.Default.Key, contentDescription = null, modifier = Modifier.size(12.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("Fill Pass", fontSize = 10.sp)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // ==========================================
+        // 4. MULTI-WEBVIEW CONTAINER (NO TAB RESETS)
+        // ==========================================
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f)
+        ) {
+            AndroidView(
+                modifier = Modifier.fillMaxSize(),
+                factory = { ctx ->
+                    FrameLayout(ctx).apply {
+                        containerLayout = this
+                        layoutParams = ViewGroup.LayoutParams(
+                            ViewGroup.LayoutParams.MATCH_PARENT,
+                            ViewGroup.LayoutParams.MATCH_PARENT
+                        )
+
+                        // Initialize the initial tab webview
+                        val initialTab = tabs[0]
+                        val initialWebView = createConfiguredWebView(ctx, initialTab)
+                        webViewPool[initialTab.id] = initialWebView
+                        addView(initialWebView)
+                        activeWebView = initialWebView
+                    }
+                }
+            )
+        }
+
+        // ==========================================
+        // 5. CHROME-STYLE BOTTOM NAVIGATION BAR
+        // ==========================================
+        Surface(
+            color = MaterialTheme.colorScheme.surface,
+            tonalElevation = 2.dp,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(44.dp)
+                    .padding(horizontal = 8.dp),
+                horizontalArrangement = Arrangement.SpaceAround,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // Back Button
+                IconButton(
+                    onClick = { activeWebView?.goBack() },
+                    enabled = canGoBack,
+                    modifier = Modifier.size(36.dp)
+                ) {
+                    Icon(
+                        Icons.Default.ArrowBack,
+                        contentDescription = "Back",
+                        tint = if (canGoBack) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f),
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+
+                // Forward Button
+                IconButton(
+                    onClick = { activeWebView?.goForward() },
+                    enabled = canGoForward,
+                    modifier = Modifier.size(36.dp)
+                ) {
+                    Icon(
+                        Icons.Default.ArrowForward,
+                        contentDescription = "Forward",
+                        tint = if (canGoForward) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f),
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+
+                // Direct X Signup Shortcut
+                IconButton(
+                    onClick = {
+                        activeWebView?.loadUrl("https://x.com/i/flow/signup")
+                    },
+                    modifier = Modifier.size(36.dp)
+                ) {
+                    Icon(
+                        Icons.Default.PersonAdd,
+                        contentDescription = "X Signup",
+                        tint = PrimaryBlue,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+
+                // Bookmark Toggle
+                val isBookmarked = bookmarks.contains(currentUrl)
+                IconButton(
+                    onClick = {
+                        if (isBookmarked) {
+                            bookmarks.remove(currentUrl)
+                            Toast.makeText(context, "Bookmark removed", Toast.LENGTH_SHORT).show()
+                        } else {
+                            bookmarks.add(currentUrl)
+                            Toast.makeText(context, "Bookmark saved", Toast.LENGTH_SHORT).show()
+                        }
+                    },
+                    modifier = Modifier.size(36.dp)
+                ) {
+                    Icon(
+                        imageVector = if (isBookmarked) Icons.Default.Bookmark else Icons.Default.BookmarkBorder,
+                        contentDescription = "Bookmark",
+                        tint = if (isBookmarked) PrimaryBlue else MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+
+                // Share URL
+                IconButton(
+                    onClick = {
+                        val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                            type = "text/plain"
+                            putExtra(Intent.EXTRA_TEXT, currentUrl)
+                        }
+                        context.startActivity(Intent.createChooser(shareIntent, "Share URL"))
+                    },
+                    modifier = Modifier.size(36.dp)
+                ) {
+                    Icon(
+                        Icons.Default.Share,
+                        contentDescription = "Share",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+            }
+        }
+    }
+
+    // ==========================================
+    // 6. CHROME-STYLE TAB SWITCHER DIALOG
+    // ==========================================
+    if (showTabSwitcher) {
+        AlertDialog(
+            onDismissRequest = { showTabSwitcher = false },
+            title = {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("Tabs (${tabs.size})", fontWeight = FontWeight.Bold, fontSize = 17.sp)
+                    FilledTonalButton(
+                        onClick = {
+                            addNewTab("https://x.com/i/flow/signup")
+                        },
+                        shape = RoundedCornerShape(8.dp),
+                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                        modifier = Modifier.height(30.dp)
+                    ) {
+                        Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(14.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("New tab", fontSize = 12.sp)
+                    }
+                }
+            },
+            text = {
+                LazyColumn(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 380.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    items(tabs.indices.toList()) { index ->
+                        val tab = tabs[index]
+                        val isSelected = index == activeTabIndex
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            color = if (isSelected) PrimaryBlue.copy(alpha = 0.12f) else MaterialTheme.colorScheme.surfaceVariant,
+                            border = if (isSelected) androidx.compose.foundation.BorderStroke(1.5.dp, PrimaryBlue) else null,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    switchTab(index)
+                                    showTabSwitcher = false
+                                }
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Icon(
+                                        Icons.Default.Language,
+                                        contentDescription = null,
+                                        tint = if (isSelected) PrimaryBlue else MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(10.dp))
+                                    Column {
+                                        Text(
+                                            text = tab.title,
+                                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                            fontSize = 13.sp,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                            color = MaterialTheme.colorScheme.onSurface
+                                        )
+                                        Text(
+                                            text = tab.url,
+                                            fontSize = 11.sp,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                    }
+                                }
+                                IconButton(
+                                    onClick = { closeTab(index) },
+                                    modifier = Modifier.size(28.dp)
+                                ) {
+                                    Icon(
+                                        Icons.Default.Close,
+                                        contentDescription = "Close Tab",
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showTabSwitcher = false }) {
+                    Text("Done")
+                }
+            }
+        )
+    }
+
+    // ==========================================
+    // 7. PHONE NUMBER EDIT DIALOG
+    // ==========================================
     if (showPhoneEditDialog) {
         AlertDialog(
             onDismissRequest = { showPhoneEditDialog = false },
-            title = { Text("Set Real Phone Number") },
+            title = { Text("Active 2nr Telephony Number") },
             text = {
                 Column {
                     Text(
-                        text = "Enter your real Polish 2nr phone number (e.g. +48459074091):",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = TextMuted
+                        "Set the Polish number captured from 2nr or Render Cloud:",
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
-                    Spacer(modifier = Modifier.height(8.dp))
+                    Spacer(modifier = Modifier.height(10.dp))
                     OutlinedTextField(
                         value = phoneInputText,
                         onValueChange = { phoneInputText = it },
                         label = { Text("Phone Number") },
-                        placeholder = { Text("+48...") },
+                        placeholder = { Text("+48459074091") },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth(),
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone)
@@ -251,11 +1150,12 @@ fun BrowserScreen(
                             engine?.updateActivePhoneNumber(phoneInputText.trim())
                             showPhoneEditDialog = false
                             Toast.makeText(context, "Active phone updated: ${phoneInputText.trim()}", Toast.LENGTH_SHORT).show()
+                            runAutoPilotOnActiveTab()
                         }
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = PrimaryBlue)
                 ) {
-                    Text("Save")
+                    Text("Save & Apply")
                 }
             },
             dismissButton = {
@@ -266,1184 +1166,83 @@ fun BrowserScreen(
         )
     }
 
-    // Tab Switcher Dialog
-    if (showTabSwitcher) {
-        AlertDialog(
-            onDismissRequest = { showTabSwitcher = false },
-            title = {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text("Tabs (${tabs.size})", fontWeight = FontWeight.Bold)
-                    FilledTonalButton(
-                        onClick = {
-                            val newTab = BrowserTab(url = "https://x.com", title = "New Tab")
-                            tabs = tabs + newTab
-                            activeTabIndex = tabs.size - 1
-                            currentUrl = newTab.url
-                            inputUrl = newTab.url
-                            webViewInstance?.loadUrl(newTab.url)
-                            showTabSwitcher = false
-                        },
-                        shape = RoundedCornerShape(8.dp),
-                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
-                        modifier = Modifier.height(28.dp)
-                    ) {
-                        Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(14.dp))
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text("New Tab", fontSize = 11.sp)
-                    }
-                }
-            },
-            text = {
-                LazyColumn(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(max = 350.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    items(tabs.indices.toList()) { index ->
-                        val tab = tabs[index]
-                        val isSelected = index == activeTabIndex
-                        Surface(
-                            shape = RoundedCornerShape(10.dp),
-                            color = if (isSelected) SoftBlueTile else SurfaceVariantLight,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable {
-                                    activeTabIndex = index
-                                    currentUrl = tab.url
-                                    inputUrl = tab.url
-                                    webViewInstance?.loadUrl(tab.url)
-                                    showTabSwitcher = false
-                                }
-                        ) {
-                            Row(
-                                modifier = Modifier
-                                    .padding(horizontal = 12.dp, vertical = 10.dp)
-                                    .fillMaxWidth(),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(
-                                        text = tab.title,
-                                        style = MaterialTheme.typography.titleMedium.copy(fontSize = 13.sp),
-                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                                        color = if (isSelected) PrimaryBlue else TextSlateDark,
-                                        maxLines = 1
-                                    )
-                                    Text(
-                                        text = tab.url,
-                                        style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
-                                        color = TextMuted,
-                                        maxLines = 1
-                                    )
-                                }
-                                if (tabs.size > 1) {
-                                    IconButton(
-                                        onClick = {
-                                            val mutable = tabs.toMutableList()
-                                            mutable.removeAt(index)
-                                            tabs = mutable
-                                            if (activeTabIndex >= tabs.size) {
-                                                activeTabIndex = tabs.size - 1
-                                            }
-                                            val current = tabs[activeTabIndex]
-                                            currentUrl = current.url
-                                            inputUrl = current.url
-                                            webViewInstance?.loadUrl(current.url)
-                                        },
-                                        modifier = Modifier.size(24.dp)
-                                    ) {
-                                        Icon(Icons.Default.Close, contentDescription = "Close Tab", tint = TextMuted, modifier = Modifier.size(14.dp))
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            },
-            confirmButton = {
-                Button(onClick = { showTabSwitcher = false }) {
-                    Text("Done")
-                }
-            }
-        )
-    }
-
-    // Bookmarks & History Modal
+    // ==========================================
+    // 8. BOOKMARKS & HISTORY DIALOG
+    // ==========================================
     if (showBookmarksHistory) {
-        var selectedSubTab by remember { mutableStateOf(0) } // 0: Bookmarks, 1: History
         AlertDialog(
             onDismissRequest = { showBookmarksHistory = false },
-            title = {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    TabRow(
-                        selectedTabIndex = selectedSubTab,
-                        modifier = Modifier.weight(1f),
-                        containerColor = Color.Transparent
-                    ) {
-                        Tab(
-                            selected = selectedSubTab == 0,
-                            onClick = { selectedSubTab = 0 },
-                            text = { Text("Bookmarks (${bookmarks.size})") }
-                        )
-                        Tab(
-                            selected = selectedSubTab == 1,
-                            onClick = { selectedSubTab = 1 },
-                            text = { Text("History (${history.size})") }
-                        )
-                    }
-                }
-            },
+            title = { Text("History & Bookmarks") },
             text = {
                 Column(modifier = Modifier.fillMaxWidth()) {
-                    if (selectedSubTab == 0) {
-                        if (bookmarks.isEmpty()) {
-                            Text("No saved bookmarks yet.", color = TextMuted, modifier = Modifier.padding(16.dp))
-                        } else {
-                            LazyColumn(
+                    Text("Bookmarks", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = PrimaryBlue)
+                    Spacer(modifier = Modifier.height(4.dp))
+                    LazyColumn(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(max = 140.dp)
+                    ) {
+                        items(bookmarks.toList()) { bUrl ->
+                            Surface(
+                                shape = RoundedCornerShape(8.dp),
+                                color = MaterialTheme.colorScheme.surfaceVariant,
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .heightIn(max = 300.dp),
-                                verticalArrangement = Arrangement.spacedBy(6.dp)
-                            ) {
-                                items(bookmarks.toList()) { bUrl ->
-                                    Surface(
-                                        shape = RoundedCornerShape(8.dp),
-                                        color = SurfaceVariantLight,
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .clickable {
-                                                navigateTo(bUrl)
-                                                showBookmarksHistory = false
-                                            }
-                                    ) {
-                                        Row(
-                                            modifier = Modifier.padding(8.dp),
-                                            verticalAlignment = Alignment.CenterVertically,
-                                            horizontalArrangement = Arrangement.SpaceBetween
-                                        ) {
-                                            Text(text = bUrl, fontSize = 12.sp, color = TextSlateDark, modifier = Modifier.weight(1f), maxLines = 1)
-                                            IconButton(
-                                                onClick = { bookmarks = (bookmarks - bUrl).toMutableSet() },
-                                                modifier = Modifier.size(20.dp)
-                                            ) {
-                                                Icon(Icons.Default.Close, contentDescription = null, tint = TextMuted, modifier = Modifier.size(12.dp))
-                                            }
-                                        }
+                                    .padding(vertical = 2.dp)
+                                    .clickable {
+                                        activeWebView?.loadUrl(bUrl)
+                                        showBookmarksHistory = false
                                     }
-                                }
+                            ) {
+                                Text(
+                                    text = bUrl,
+                                    fontSize = 12.sp,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp)
+                                )
                             }
                         }
-                    } else {
-                        if (history.isEmpty()) {
-                            Text("No browsing history.", color = TextMuted, modifier = Modifier.padding(16.dp))
-                        } else {
+                    }
+
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Text("Recent History", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = PrimaryBlue)
+                    Spacer(modifier = Modifier.height(4.dp))
+                    LazyColumn(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(max = 140.dp)
+                    ) {
+                        items(history.takeLast(10).reversed()) { hItem ->
                             Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.End
-                            ) {
-                                TextButton(onClick = { history = mutableListOf() }) {
-                                    Text("Clear All", fontSize = 11.sp, color = ErrorRed)
-                                }
-                            }
-                            LazyColumn(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .heightIn(max = 280.dp),
-                                verticalArrangement = Arrangement.spacedBy(6.dp)
-                            ) {
-                                items(history.reversed()) { hItem ->
-                                    Surface(
-                                        shape = RoundedCornerShape(8.dp),
-                                        color = SurfaceVariantLight,
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .clickable {
-                                                navigateTo(hItem.url)
-                                                showBookmarksHistory = false
-                                            }
-                                    ) {
-                                        Column(modifier = Modifier.padding(8.dp)) {
-                                            Text(text = hItem.title, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = TextSlateDark, maxLines = 1)
-                                            Text(text = "${hItem.timestamp} • ${hItem.url}", fontSize = 10.sp, color = TextMuted, maxLines = 1)
-                                        }
+                                    .clickable {
+                                        activeWebView?.loadUrl(hItem.url)
+                                        showBookmarksHistory = false
                                     }
-                                }
+                                    .padding(vertical = 4.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text(
+                                    text = hItem.title.ifEmpty { hItem.url },
+                                    fontSize = 12.sp,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.weight(1f)
+                                )
+                                Text(text = hItem.timestamp, fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
                         }
                     }
                 }
             },
             confirmButton = {
-                Button(onClick = { showBookmarksHistory = false }) {
+                TextButton(onClick = { showBookmarksHistory = false }) {
                     Text("Close")
                 }
             }
         )
-    }
-
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            .background(BackgroundLight)
-    ) {
-        // Collapsible Workflow Registration HUD Bar (with Real 2nr Native App Launcher)
-        Card(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 10.dp, vertical = 3.dp),
-            shape = RoundedCornerShape(12.dp),
-            colors = CardDefaults.cardColors(containerColor = SurfaceWhite),
-            elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
-        ) {
-            Column(modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)) {
-                // Compact Header with Toggle
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Surface(
-                            shape = RoundedCornerShape(6.dp),
-                            color = if (!state.label.contains("Idle")) SoftGreenTile else SurfaceVariantLight
-                        ) {
-                            Text(
-                                text = if (!state.label.contains("Idle")) "AUTONOMOUS ACTIVE" else "WORKFLOW TOOLS",
-                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                                color = if (!state.label.contains("Idle")) SuccessGreen else TextMuted,
-                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                            )
-                        }
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text(
-                            text = if (isHudExpanded) state.label else "Phone: $phoneNumber",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = TextSlateDark,
-                            maxLines = 1
-                        )
-                    }
-
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        // 1-Tap Real 2nr App Launcher with Floating Overlay
-                        FilledTonalButton(
-                            onClick = { AppLauncher.open2nrApp(context, launchOverlay = true) },
-                            shape = RoundedCornerShape(8.dp),
-                            colors = ButtonDefaults.filledTonalButtonColors(containerColor = SoftGreenTile),
-                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
-                            modifier = Modifier.height(30.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.PhoneAndroid,
-                                contentDescription = "Open 2nr App",
-                                tint = SuccessGreen,
-                                modifier = Modifier.size(13.dp)
-                            )
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text("2nr", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = SuccessGreen)
-                        }
-
-                        Spacer(modifier = Modifier.width(4.dp))
-
-                        // 1-Tap Telegram @EHR_QUICKINCOME_BOT Auto-Fetch Launcher
-                        FilledTonalButton(
-                            onClick = {
-                                engine?.requestNewPhoneNumberFromTelegramBot()
-                                Toast.makeText(context, "Requesting fresh number from Telegram bot...", Toast.LENGTH_SHORT).show()
-                                AppLauncher.openTelegramBot(context, "EHR_QUICKINCOME_BOT", launchOverlay = true)
-                            },
-                            shape = RoundedCornerShape(8.dp),
-                            colors = ButtonDefaults.filledTonalButtonColors(containerColor = SoftBlueTile),
-                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
-                            modifier = Modifier.height(30.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Send,
-                                contentDescription = "Telegram Bot",
-                                tint = PrimaryBlue,
-                                modifier = Modifier.size(13.dp)
-                            )
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text("TG Bot", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = PrimaryBlue)
-                        }
-
-                        Spacer(modifier = Modifier.width(4.dp))
-
-                        // 1-Tap Split-Screen Launcher for 2nr side-by-side
-                        FilledTonalButton(
-                            onClick = { AppLauncher.open2nrInSplitScreen(context) },
-                            shape = RoundedCornerShape(8.dp),
-                            colors = ButtonDefaults.filledTonalButtonColors(containerColor = SoftBlueTile),
-                            contentPadding = PaddingValues(horizontal = 6.dp, vertical = 4.dp),
-                            modifier = Modifier.height(30.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.VerticalSplit,
-                                contentDescription = "Split Screen 2nr",
-                                tint = PrimaryBlue,
-                                modifier = Modifier.size(13.dp)
-                            )
-                            Spacer(modifier = Modifier.width(3.dp))
-                            Text("Split", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = PrimaryBlue)
-                        }
-
-                        Spacer(modifier = Modifier.width(4.dp))
-
-                        // Capture session button always accessible
-                        FilledTonalButton(
-                            onClick = {
-                                val cookies = CookieManager.getInstance().getCookie("https://x.com") ?: ""
-                                if (engine != null) {
-                                    scope.launch {
-                                        val result = engine.captureRealSession(cookies)
-                                        if (result.isSuccess) {
-                                            val acc = result.getOrNull()
-                                            Toast.makeText(
-                                                context,
-                                                "Account verified: ${acc?.username}. Session saved to Vault.",
-                                                Toast.LENGTH_LONG
-                                            ).show()
-                                        } else {
-                                            Toast.makeText(
-                                                context,
-                                                result.exceptionOrNull()?.message ?: "Not logged in yet. Please complete signup on X.com.",
-                                                Toast.LENGTH_LONG
-                                            ).show()
-                                        }
-                                    }
-                                } else {
-                                    Toast.makeText(context, "Engine not connected", Toast.LENGTH_SHORT).show()
-                                }
-                            },
-                            shape = RoundedCornerShape(8.dp),
-                            colors = ButtonDefaults.filledTonalButtonColors(containerColor = SoftBlueTile),
-                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
-                            modifier = Modifier.height(30.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Check,
-                                contentDescription = "Capture Session",
-                                tint = PrimaryBlue,
-                                modifier = Modifier.size(13.dp)
-                            )
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text("Save Session", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = PrimaryBlue)
-                        }
-
-                        Spacer(modifier = Modifier.width(4.dp))
-
-                        // Toggle button to expand/collapse HUD
-                        IconButton(
-                            onClick = { isHudExpanded = !isHudExpanded },
-                            modifier = Modifier.size(30.dp)
-                        ) {
-                            Icon(
-                                imageVector = if (isHudExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
-                                contentDescription = if (isHudExpanded) "Collapse" else "Expand",
-                                tint = TextMuted,
-                                modifier = Modifier.size(18.dp)
-                            )
-                        }
-                    }
-                }
-
-                // Expanded Workflow Details
-                AnimatedVisibility(visible = isHudExpanded) {
-                    Column(modifier = Modifier.padding(top = 8.dp)) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            // Phone Chip
-                            Surface(
-                                shape = RoundedCornerShape(8.dp),
-                                color = SoftBlueTile,
-                                modifier = Modifier.weight(1.2f)
-                            ) {
-                                Row(
-                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.SpaceBetween
-                                ) {
-                                    Column(modifier = Modifier.weight(1f)) {
-                                        Text(text = "2nr Phone", fontSize = 9.sp, color = TextMuted)
-                                        Text(text = phoneNumber, fontSize = 11.sp, fontWeight = FontWeight.Bold, color = TextSlateDark)
-                                    }
-                                    Row {
-                                        IconButton(
-                                            onClick = {
-                                                phoneInputText = phoneNumber
-                                                showPhoneEditDialog = true
-                                            },
-                                            modifier = Modifier.size(24.dp)
-                                        ) {
-                                            Icon(Icons.Default.Edit, "Edit Phone", modifier = Modifier.size(12.dp), tint = PrimaryBlue)
-                                        }
-                                        IconButton(
-                                            onClick = { copyToClipboard(context, "Phone", phoneNumber) },
-                                            modifier = Modifier.size(24.dp)
-                                        ) {
-                                            Icon(Icons.Default.ContentCopy, "Copy", modifier = Modifier.size(12.dp), tint = PrimaryBlue)
-                                        }
-                                        IconButton(
-                                            onClick = {
-                                                injectValueIntoInput(webViewInstance, phoneNumber)
-                                                Toast.makeText(context, "Filled phone into input", Toast.LENGTH_SHORT).show()
-                                            },
-                                            modifier = Modifier.size(24.dp)
-                                        ) {
-                                            Icon(Icons.Default.Input, "Fill", modifier = Modifier.size(12.dp), tint = PrimaryBlue)
-                                        }
-                                    }
-                                }
-                            }
-
-                            // OTP Chip
-                            Surface(
-                                shape = RoundedCornerShape(8.dp),
-                                color = if (latestOtp != null) SoftGreenTile else SurfaceVariantLight,
-                                modifier = Modifier.weight(1f)
-                            ) {
-                                Row(
-                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.SpaceBetween
-                                ) {
-                                    Column(modifier = Modifier.weight(1f)) {
-                                        Text("2nr SMS OTP", fontSize = 9.sp, color = if (latestOtp != null) SuccessGreen else TextMuted)
-                                        Text(
-                                            text = latestOtp ?: "Waiting...",
-                                            fontSize = 11.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            color = if (latestOtp != null) SuccessGreen else TextMuted
-                                        )
-                                    }
-                                    if (latestOtp != null) {
-                                        IconButton(
-                                            onClick = {
-                                                injectValueIntoInput(webViewInstance, latestOtp!!)
-                                                Toast.makeText(context, "Filled OTP: $latestOtp", Toast.LENGTH_SHORT).show()
-                                            },
-                                            modifier = Modifier.size(24.dp)
-                                        ) {
-                                            Icon(Icons.Default.Input, "Fill OTP", modifier = Modifier.size(13.dp), tint = SuccessGreen)
-                                        }
-                                    }
-                                }
-                            }
-                        }
-
-                        Spacer(modifier = Modifier.height(6.dp))
-
-                        // Password Row
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Text(
-                                text = "Password: $password",
-                                fontSize = 11.sp,
-                                color = TextMuted,
-                                fontWeight = FontWeight.Medium
-                            )
-                            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                                TextButton(
-                                    onClick = { copyToClipboard(context, "Password", password) },
-                                    contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp),
-                                    modifier = Modifier.height(26.dp)
-                                ) {
-                                    Icon(Icons.Default.ContentCopy, contentDescription = null, modifier = Modifier.size(12.dp))
-                                    Spacer(modifier = Modifier.width(3.dp))
-                                    Text("Copy Pass", fontSize = 10.sp)
-                                }
-                                TextButton(
-                                    onClick = {
-                                        engine?.regeneratePassword()
-                                        Toast.makeText(context, "New secure password generated", Toast.LENGTH_SHORT).show()
-                                    },
-                                    contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp),
-                                    modifier = Modifier.height(26.dp)
-                                ) {
-                                    Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(12.dp))
-                                    Spacer(modifier = Modifier.width(3.dp))
-                                    Text("New Pass", fontSize = 10.sp)
-                                }
-                            }
-                        }
-
-                        Spacer(modifier = Modifier.height(6.dp))
-
-                        // Proxy Route Row (Multi-region & Random Location Mode)
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Text(
-                                text = "Proxy Route: ${if (proxyCountry == "RANDOM") "Random Locations (Active)" else "Region: $proxyCountry"}",
-                                fontSize = 11.sp,
-                                color = TextMuted,
-                                fontWeight = FontWeight.Medium
-                            )
-                            TextButton(
-                                onClick = {
-                                    val next = engine?.toggleProxyCountry() ?: "RANDOM"
-                                    Toast.makeText(
-                                        context,
-                                        "Proxy Route: $next",
-                                        Toast.LENGTH_SHORT
-                                    ).show()
-                                },
-                                contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp),
-                                modifier = Modifier.height(26.dp)
-                            ) {
-                                Icon(Icons.Default.VpnKey, contentDescription = null, modifier = Modifier.size(12.dp))
-                                Spacer(modifier = Modifier.width(3.dp))
-                                Text("Switch Route", fontSize = 10.sp)
-                            }
-                        }
-
-                        Spacer(modifier = Modifier.height(4.dp))
-
-                        // 2nr Companion Assistant Row
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Text(
-                                text = "2nr Companion:",
-                                fontSize = 11.sp,
-                                color = TextMuted,
-                                fontWeight = FontWeight.Medium
-                            )
-                            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                                TextButton(
-                                    onClick = { AppLauncher.open2nrApp(context, launchOverlay = true) },
-                                    contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp),
-                                    modifier = Modifier.height(26.dp)
-                                ) {
-                                    Icon(Icons.Default.PictureInPicture, contentDescription = null, modifier = Modifier.size(12.dp))
-                                    Spacer(modifier = Modifier.width(3.dp))
-                                    Text("Floating HUD", fontSize = 10.sp)
-                                }
-                                TextButton(
-                                    onClick = { AppLauncher.open2nrInSplitScreen(context) },
-                                    contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp),
-                                    modifier = Modifier.height(26.dp)
-                                ) {
-                                    Icon(Icons.Default.VerticalSplit, contentDescription = null, modifier = Modifier.size(12.dp))
-                                    Spacer(modifier = Modifier.width(3.dp))
-                                    Text("Split Screen", fontSize = 10.sp)
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        // Find In Page Toolbar
-        AnimatedVisibility(visible = showFindInPage) {
-            Surface(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 10.dp, vertical = 2.dp),
-                shape = RoundedCornerShape(8.dp),
-                color = SurfaceVariantLight
-            ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(Icons.Default.Search, contentDescription = null, tint = PrimaryBlue, modifier = Modifier.size(16.dp))
-                    Spacer(modifier = Modifier.width(6.dp))
-                    OutlinedTextField(
-                        value = findQuery,
-                        onValueChange = {
-                            findQuery = it
-                            if (it.isNotEmpty()) webViewInstance?.findAllAsync(it) else webViewInstance?.clearMatches()
-                        },
-                        placeholder = { Text("Find in page...", fontSize = 11.sp) },
-                        singleLine = true,
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedContainerColor = Color.Transparent,
-                            unfocusedContainerColor = Color.Transparent,
-                            focusedBorderColor = Color.Transparent,
-                            unfocusedBorderColor = Color.Transparent
-                        ),
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(40.dp)
-                    )
-                    IconButton(onClick = { webViewInstance?.findNext(false) }, modifier = Modifier.size(28.dp)) {
-                        Icon(Icons.Default.KeyboardArrowUp, contentDescription = "Prev", modifier = Modifier.size(18.dp))
-                    }
-                    IconButton(onClick = { webViewInstance?.findNext(true) }, modifier = Modifier.size(28.dp)) {
-                        Icon(Icons.Default.KeyboardArrowDown, contentDescription = "Next", modifier = Modifier.size(18.dp))
-                    }
-                    IconButton(
-                        onClick = {
-                            showFindInPage = false
-                            webViewInstance?.clearMatches()
-                            findQuery = ""
-                        },
-                        modifier = Modifier.size(28.dp)
-                    ) {
-                        Icon(Icons.Default.Close, contentDescription = "Close Find", modifier = Modifier.size(16.dp))
-                    }
-                }
-            }
-        }
-
-        // Real Interactive Address Bar & Search Omnibox
-        Card(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 10.dp, vertical = 2.dp),
-            shape = RoundedCornerShape(10.dp),
-            colors = CardDefaults.cardColors(containerColor = SurfaceWhite),
-            elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
-        ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 8.dp, vertical = 2.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                // SSL Lock indicator
-                Icon(
-                    imageVector = if (currentUrl.startsWith("https://")) Icons.Default.Lock else Icons.Default.LockOpen,
-                    contentDescription = "SSL Status",
-                    tint = if (currentUrl.startsWith("https://")) SuccessGreen else TextMuted,
-                    modifier = Modifier.size(15.dp)
-                )
-
-                Spacer(modifier = Modifier.width(6.dp))
-
-                // Editable URL / Search Input Field
-                OutlinedTextField(
-                    value = inputUrl,
-                    onValueChange = { inputUrl = it },
-                    placeholder = { Text("Search or type URL...", fontSize = 12.sp, color = TextMuted) },
-                    singleLine = true,
-                    keyboardOptions = KeyboardOptions(
-                        keyboardType = KeyboardType.Uri,
-                        imeAction = ImeAction.Go
-                    ),
-                    keyboardActions = KeyboardActions(
-                        onGo = {
-                            focusManager.clearFocus()
-                            navigateTo(inputUrl)
-                        }
-                    ),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedContainerColor = Color.Transparent,
-                        unfocusedContainerColor = Color.Transparent,
-                        focusedBorderColor = Color.Transparent,
-                        unfocusedBorderColor = Color.Transparent
-                    ),
-                    textStyle = MaterialTheme.typography.bodyMedium.copy(fontSize = 12.sp, color = TextSlateDark),
-                    modifier = Modifier
-                        .weight(1f)
-                        .height(44.dp),
-                    trailingIcon = {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            // Bookmark Star Button
-                            val isBookmarked = bookmarks.contains(currentUrl)
-                            IconButton(
-                                onClick = {
-                                    if (isBookmarked) {
-                                        bookmarks = (bookmarks - currentUrl).toMutableSet()
-                                        Toast.makeText(context, "Bookmark removed", Toast.LENGTH_SHORT).show()
-                                    } else {
-                                        bookmarks = (bookmarks + currentUrl).toMutableSet()
-                                        Toast.makeText(context, "Page bookmarked", Toast.LENGTH_SHORT).show()
-                                    }
-                                },
-                                modifier = Modifier.size(26.dp)
-                            ) {
-                                Icon(
-                                    imageVector = if (isBookmarked) Icons.Default.Star else Icons.Default.StarBorder,
-                                    contentDescription = "Bookmark",
-                                    tint = if (isBookmarked) WarningAmber else TextMuted,
-                                    modifier = Modifier.size(16.dp)
-                                )
-                            }
-
-                            if (inputUrl.isNotBlank()) {
-                                IconButton(
-                                    onClick = { inputUrl = "" },
-                                    modifier = Modifier.size(24.dp)
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.Close,
-                                        contentDescription = "Clear",
-                                        tint = TextMuted,
-                                        modifier = Modifier.size(14.dp)
-                                    )
-                                }
-                            }
-
-                            IconButton(
-                                onClick = {
-                                    focusManager.clearFocus()
-                                    navigateTo(inputUrl)
-                                },
-                                modifier = Modifier.size(28.dp)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.ArrowForward,
-                                    contentDescription = "Go",
-                                    tint = PrimaryBlue,
-                                    modifier = Modifier.size(16.dp)
-                                )
-                            }
-                        }
-                    }
-                )
-            }
-        }
-
-        // Real Page Loading Progress Bar
-        if (isLoading) {
-            LinearProgressIndicator(
-                progress = pageProgress / 100f,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(2.5.dp),
-                color = PrimaryBlue,
-                trackColor = Color.Transparent
-            )
-        } else {
-            Spacer(modifier = Modifier.height(2.5.dp))
-        }
-
-        // Professional Browser Navigation Toolbar (Back, Forward, Refresh, Home, Tabs, Share, Menu)
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 8.dp, vertical = 2.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            // Navigation controls (Back, Forward, Reload/Stop, Home)
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                IconButton(
-                    onClick = { if (webViewInstance?.canGoBack() == true) webViewInstance?.goBack() },
-                    enabled = canGoBack,
-                    modifier = Modifier.size(28.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.ArrowBack,
-                        contentDescription = "Back",
-                        tint = if (canGoBack) PrimaryBlue else TextMuted.copy(alpha = 0.4f),
-                        modifier = Modifier.size(16.dp)
-                    )
-                }
-
-                IconButton(
-                    onClick = { if (webViewInstance?.canGoForward() == true) webViewInstance?.goForward() },
-                    enabled = canGoForward,
-                    modifier = Modifier.size(28.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.ArrowForward,
-                        contentDescription = "Forward",
-                        tint = if (canGoForward) PrimaryBlue else TextMuted.copy(alpha = 0.4f),
-                        modifier = Modifier.size(16.dp)
-                    )
-                }
-
-                IconButton(
-                    onClick = {
-                        if (isLoading) webViewInstance?.stopLoading() else webViewInstance?.reload()
-                    },
-                    modifier = Modifier.size(28.dp)
-                ) {
-                    Icon(
-                        imageVector = if (isLoading) Icons.Default.Close else Icons.Default.Refresh,
-                        contentDescription = if (isLoading) "Stop" else "Reload",
-                        tint = TextSlateDark,
-                        modifier = Modifier.size(16.dp)
-                    )
-                }
-
-                IconButton(
-                    onClick = { navigateTo("https://x.com") },
-                    modifier = Modifier.size(28.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Home,
-                        contentDescription = "Home",
-                        tint = TextSlateDark,
-                        modifier = Modifier.size(16.dp)
-                    )
-                }
-            }
-
-            // Professional Toolbar Actions: AdBlock Shield, Tab Counter, Find in Page, Share, Bookmarks/History, Desktop Mode
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                // Titanium AdBlock Shield Badge
-                Surface(
-                    onClick = {
-                        Toast.makeText(
-                            context,
-                            "AdBlock Shield: $blockedAdsCount ads & $blockedTrackersCount trackers blocked",
-                            Toast.LENGTH_SHORT
-                        ).show()
-                    },
-                    shape = RoundedCornerShape(6.dp),
-                    color = if (blockedAdsCount + blockedTrackersCount > 0) SoftGreenTile else SurfaceVariantLight,
-                    modifier = Modifier.height(26.dp)
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Shield,
-                            contentDescription = "AdBlock Shield",
-                            tint = if (blockedAdsCount + blockedTrackersCount > 0) SuccessGreen else TextMuted,
-                            modifier = Modifier.size(13.dp)
-                        )
-                        Spacer(modifier = Modifier.width(3.dp))
-                        Text(
-                            text = "${blockedAdsCount + blockedTrackersCount}",
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = if (blockedAdsCount + blockedTrackersCount > 0) SuccessGreen else TextMuted
-                        )
-                    }
-                }
-
-                Spacer(modifier = Modifier.width(4.dp))
-
-                // Tab Switcher Button
-                Surface(
-                    onClick = { showTabSwitcher = true },
-                    shape = RoundedCornerShape(6.dp),
-                    color = SurfaceVariantLight,
-                    modifier = Modifier.size(26.dp)
-                ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Text(
-                            text = "${tabs.size}",
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = PrimaryBlue
-                        )
-                    }
-                }
-
-                Spacer(modifier = Modifier.width(4.dp))
-
-                // Find on Page button
-                IconButton(
-                    onClick = { showFindInPage = !showFindInPage },
-                    modifier = Modifier.size(28.dp)
-                ) {
-                    Icon(Icons.Default.Search, contentDescription = "Find", tint = if (showFindInPage) PrimaryBlue else TextSlateDark, modifier = Modifier.size(16.dp))
-                }
-
-                // Share Button
-                IconButton(
-                    onClick = { shareCurrentPage() },
-                    modifier = Modifier.size(28.dp)
-                ) {
-                    Icon(Icons.Default.Share, contentDescription = "Share", tint = TextSlateDark, modifier = Modifier.size(16.dp))
-                }
-
-                // Bookmarks & History Modal Button
-                IconButton(
-                    onClick = { showBookmarksHistory = true },
-                    modifier = Modifier.size(28.dp)
-                ) {
-                    Icon(Icons.Default.Bookmarks, contentDescription = "Bookmarks & History", tint = TextSlateDark, modifier = Modifier.size(16.dp))
-                }
-
-                // Desktop site toggle
-                IconButton(
-                    onClick = {
-                        isDesktopMode = !isDesktopMode
-                        webViewInstance?.settings?.userAgentString = if (isDesktopMode) desktopUserAgent else mobileUserAgent
-                        webViewInstance?.settings?.useWideViewPort = isDesktopMode
-                        webViewInstance?.reload()
-                        Toast.makeText(context, if (isDesktopMode) "Desktop mode enabled" else "Mobile mode enabled", Toast.LENGTH_SHORT).show()
-                    },
-                    modifier = Modifier.size(28.dp)
-                ) {
-                    Icon(
-                        imageVector = if (isDesktopMode) Icons.Default.DesktopWindows else Icons.Default.PhoneAndroid,
-                        contentDescription = "Toggle Desktop Mode",
-                        tint = if (isDesktopMode) PrimaryBlue else TextMuted,
-                        modifier = Modifier.size(16.dp)
-                    )
-                }
-
-                // Incognito Mode Toggle
-                IconButton(
-                    onClick = {
-                        isIncognitoMode = !isIncognitoMode
-                        if (isIncognitoMode) {
-                            CookieManager.getInstance().removeAllCookies(null)
-                            webViewInstance?.clearCache(true)
-                            Toast.makeText(context, "Incognito mode active: Zero history recorded", Toast.LENGTH_SHORT).show()
-                        } else {
-                            Toast.makeText(context, "Standard mode active", Toast.LENGTH_SHORT).show()
-                        }
-                    },
-                    modifier = Modifier.size(28.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.VpnLock,
-                        contentDescription = "Incognito",
-                        tint = if (isIncognitoMode) SecondaryEmerald else TextMuted,
-                        modifier = Modifier.size(16.dp)
-                    )
-                }
-            }
-        }
-
-        // Quick Navigation Bookmarks Bar (Authentic Websites Only)
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .horizontalScroll(rememberScrollState())
-                .padding(horizontal = 10.dp, vertical = 2.dp),
-            horizontalArrangement = Arrangement.spacedBy(6.dp)
-        ) {
-            BookmarkChip("X.com") { navigateTo("https://x.com") }
-            BookmarkChip("X Signup") { navigateTo("https://x.com/i/flow/signup") }
-            BookmarkChip("Google") { navigateTo("https://www.google.com") }
-            BookmarkChip("DuckDuckGo") { navigateTo("https://duckduckgo.com") }
-            BookmarkChip("Wikipedia") { navigateTo("https://en.m.wikipedia.org") }
-        }
-
-        Spacer(modifier = Modifier.height(2.dp))
-
-        // Full Android WebView with WebChromeClient, DownloadListener, and Adblock
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .weight(1f)
-        ) {
-            AndroidView(
-                modifier = Modifier.fillMaxSize(),
-                factory = { ctx ->
-                    WebView(ctx).apply {
-                        webViewInstance = this
-                        layoutParams = ViewGroup.LayoutParams(
-                            ViewGroup.LayoutParams.MATCH_PARENT,
-                            ViewGroup.LayoutParams.MATCH_PARENT
-                        )
-
-                        // Full professional browser settings
-                        settings.apply {
-                            javaScriptEnabled = true
-                            domStorageEnabled = true
-                            databaseEnabled = true
-                            useWideViewPort = true
-                            loadWithOverviewMode = true
-                            setSupportZoom(true)
-                            builtInZoomControls = true
-                            displayZoomControls = false
-                            javaScriptCanOpenWindowsAutomatically = true
-                            mediaPlaybackRequiresUserGesture = false
-                            allowFileAccess = true
-                            allowContentAccess = true
-                            cacheMode = WebSettings.LOAD_DEFAULT
-                            mixedContentMode = WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE
-                            userAgentString = mobileUserAgent
-                        }
-
-                        // Enable cookies
-                        val cookieManager = CookieManager.getInstance()
-                        cookieManager.setAcceptCookie(true)
-                        cookieManager.setAcceptThirdPartyCookies(this, true)
-
-                        // Connect Twitter AutoPilot JavaScript Bridge
-                        addJavascriptInterface(autoPilot, "AndroidBridge")
-
-                        // Integrated Download Manager
-                        setDownloadListener { url, userAgent, contentDisposition, mimetype, _ ->
-                            try {
-                                val request = DownloadManager.Request(Uri.parse(url)).apply {
-                                    setMimeType(mimetype)
-                                    val cookies = CookieManager.getInstance().getCookie(url)
-                                    addRequestHeader("cookie", cookies)
-                                    addRequestHeader("User-Agent", userAgent)
-                                    setDescription("Downloading file...")
-                                    setTitle(URLUtil.guessFileName(url, contentDisposition, mimetype))
-                                    setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
-                                    setDestinationInExternalPublicDir(
-                                        Environment.DIRECTORY_DOWNLOADS,
-                                        URLUtil.guessFileName(url, contentDisposition, mimetype)
-                                    )
-                                }
-                                val dm = ctx.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
-                                dm.enqueue(request)
-                                Toast.makeText(ctx, "Downloading file...", Toast.LENGTH_SHORT).show()
-                            } catch (e: Exception) {
-                                Timber.e(e, "Error initiating download")
-                                Toast.makeText(ctx, "Download failed: ${e.message}", Toast.LENGTH_SHORT).show()
-                            }
-                        }
-
-                        // WebChromeClient for page progress, title, and JavaScript alert handling
-                        webChromeClient = object : WebChromeClient() {
-                            override fun onProgressChanged(view: WebView?, newProgress: Int) {
-                                pageProgress = newProgress
-                                isLoading = newProgress < 100
-                            }
-
-                            override fun onReceivedTitle(view: WebView?, title: String?) {
-                                if (title != null) {
-                                    pageTitle = title
-                                    if (activeTabIndex in tabs.indices) {
-                                        val updated = tabs.toMutableList()
-                                        updated[activeTabIndex] = updated[activeTabIndex].copy(title = title)
-                                        tabs = updated
-                                    }
-                                }
-                            }
-
-                            override fun onJsAlert(
-                                view: WebView?,
-                                url: String?,
-                                message: String?,
-                                result: JsResult?
-                            ): Boolean {
-                                Toast.makeText(ctx, message ?: "", Toast.LENGTH_SHORT).show()
-                                result?.confirm()
-                                return true
-                            }
-
-                            override fun onJsConfirm(
-                                view: WebView?,
-                                url: String?,
-                                message: String?,
-                                result: JsResult?
-                            ): Boolean {
-                                result?.confirm()
-                                return true
-                            }
-                        }
-
-                        // WebViewClient with Titanium AdBlock and render crash protection
-                        webViewClient = object : WebViewClient() {
-                            override fun shouldInterceptRequest(
-                                view: WebView?,
-                                request: WebResourceRequest?
-                            ): WebResourceResponse? {
-                                if (adBlockEngine.shouldBlock(request)) {
-                                    val host = request?.url?.host ?: ""
-                                    if (host.contains("analytic") || host.contains("telemetry") || host.contains("scorecard") || host.contains("tracker") || host.contains("clarity")) {
-                                        blockedTrackersCount++
-                                    } else {
-                                        blockedAdsCount++
-                                    }
-                                    return adBlockEngine.createEmptyResponse()
-                                }
-                                return super.shouldInterceptRequest(view, request)
-                            }
-
-                            override fun onPageStarted(view: WebView?, url: String?, favicon: android.graphics.Bitmap?) {
-                                super.onPageStarted(view, url, favicon)
-                                isLoading = true
-                                if (url != null) {
-                                    currentUrl = url
-                                    inputUrl = url
-                                }
-                            }
-
-                            override fun onPageFinished(view: WebView?, url: String?) {
-                                super.onPageFinished(view, url)
-                                isLoading = false
-                                if (url != null) {
-                                    currentUrl = url
-                                    inputUrl = url
-                                    // Save to history if not incognito
-                                    if (!isIncognitoMode) {
-                                        history.add(HistoryItem(url = url, title = pageTitle))
-                                    }
-                                }
-                                canGoBack = view?.canGoBack() == true
-                                canGoForward = view?.canGoForward() == true
-                                adBlockEngine.injectCosmeticAdHiding(view)
-
-                                // Trigger Twitter AutoPilot form-fill and challenge detection
-                                if (url != null && (url.contains("signup") || url.contains("flow") || url.contains("challenge"))) {
-                                    val script = TwitterAutoPilot.buildAutoPilotScript(
-                                        name = currentProfileName.value,
-                                        phone = phoneNumber,
-                                        birthMonth = currentBirthDate.value.month,
-                                        birthDay = currentBirthDate.value.day,
-                                        birthYear = currentBirthDate.value.year,
-                                        password = password,
-                                        otp = latestOtp
-                                    )
-                                    view?.evaluateJavascript(script, null)
-                                }
-                            }
-
-                            override fun onRenderProcessGone(
-                                view: WebView?,
-                                detail: RenderProcessGoneDetail?
-                            ): Boolean {
-                                Timber.w("WebView render process died. Re-initializing safely...")
-                                view?.let {
-                                    it.destroy()
-                                    webViewInstance = null
-                                }
-                                return true
-                            }
-                        }
-
-                        loadUrl(activeUrl)
-                    }
-                }
-            )
-        }
-    }
-}
-
-@Composable
-private fun BookmarkChip(
-    title: String,
-    onClick: () -> Unit
-) {
-    Surface(
-        onClick = onClick,
-        shape = RoundedCornerShape(8.dp),
-        color = SurfaceVariantLight,
-        modifier = Modifier.height(28.dp)
-    ) {
-        Box(
-            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-            contentAlignment = Alignment.Center
-        ) {
-            Text(
-                text = title,
-                fontSize = 11.sp,
-                fontWeight = FontWeight.Medium,
-                color = TextSlateDark
-            )
-        }
     }
 }
 
@@ -1459,20 +1258,30 @@ private fun injectValueIntoInput(webView: WebView?, value: String) {
     val script = """
         (function() {
             var active = document.activeElement;
+            function triggerNative(el, val) {
+                el.focus();
+                var proto = window.HTMLInputElement.prototype;
+                var descriptor = Object.getOwnPropertyDescriptor(proto, 'value');
+                if (descriptor && descriptor.set) {
+                    descriptor.set.call(el, val);
+                } else {
+                    el.value = val;
+                }
+                el.dispatchEvent(new Event('input', { bubbles: true, cancelable: true }));
+                el.dispatchEvent(new Event('change', { bubbles: true, cancelable: true }));
+                try {
+                    el.dispatchEvent(new InputEvent('input', { bubbles: true, cancelable: true, inputType: 'insertText', data: val }));
+                } catch(e) {}
+            }
+
             if (active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA')) {
-                active.value = '$value';
-                active.dispatchEvent(new Event('input', { bubbles: true }));
-                active.dispatchEvent(new Event('change', { bubbles: true }));
+                triggerNative(active, '$value');
                 return 'focused_filled';
             }
-            var inputs = document.querySelectorAll('input');
+            var inputs = document.querySelectorAll('input:not([type="hidden"]):not([disabled])');
             for (var i = 0; i < inputs.length; i++) {
-                if (!inputs[i].disabled && inputs[i].type !== 'hidden') {
-                    inputs[i].value = '$value';
-                    inputs[i].dispatchEvent(new Event('input', { bubbles: true }));
-                    inputs[i].dispatchEvent(new Event('change', { bubbles: true }));
-                    return 'first_filled';
-                }
+                triggerNative(inputs[i], '$value');
+                return 'first_filled';
             }
             return 'not_found';
         })();
