@@ -21,6 +21,10 @@ All notable changes and architectural configurations for this project are docume
   - Added fallback handler to detect and click "Use phone instead" if Twitter defaults to email.
   - Added native prototype value setters with `InputEvent`, `change`, and keyboard event dispatches to guarantee React Native for Web form synchronization.
   - Added automatic confirmation for Twitter's "Verify phone" SMS dispatch dialog ("OK" / "Verify").
+- **Hardware Back Navigation ([`BrowserScreen.kt`](file:///root/project/AAAX/app/src/main/java/com/aaa/orchestrator/ui/screens/BrowserScreen.kt))**:
+  - Integrated `BackHandler(enabled = canGoBack)` intercepting Android device hardware and gesture back actions to navigate web history backward before leaving the browser tab.
+- **Pointer & Touch Events Synthetic Click ([`TwitterAutoPilot.kt`](file:///root/project/AAAX/app/src/main/java/com/aaa/orchestrator/engine/TwitterAutoPilot.kt))**:
+  - Enhanced `simulateClick` with `PointerEvent` (`pointerdown`, `pointerup`) with computed bounding box centroids to satisfy mobile React Native touch responders.
 - **Streamlined Device Permissions ([`SettingsScreen.kt`](file:///root/project/AAAX/app/src/main/java/com/aaa/orchestrator/ui/screens/SettingsScreen.kt))**:
   - Clarified system permissions (Accessibility, Notification Listener, Overlay) as 100% optional power-user features. The app runs out of the box with zero required system permissions using cloud worker integration.
 - **Dynamic CI/CD Pipeline Fix ([`android_build.yml`](file:///root/project/AAAX/.github/workflows/android_build.yml))**:

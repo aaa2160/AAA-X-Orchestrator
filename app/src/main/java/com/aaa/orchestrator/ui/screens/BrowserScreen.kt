@@ -13,6 +13,7 @@ import android.view.ViewGroup
 import android.webkit.*
 import android.widget.FrameLayout
 import android.widget.Toast
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -91,6 +92,11 @@ fun BrowserScreen(
     var canGoForward by remember { mutableStateOf(false) }
     var isDesktopMode by remember { mutableStateOf(false) }
     var showMenu by remember { mutableStateOf(false) }
+
+    // Chrome-Style Hardware Back Navigation: browse back before exiting tab
+    BackHandler(enabled = canGoBack) {
+        activeWebView?.goBack()
+    }
 
     // Tools & Bookmarks
     var showBookmarksHistory by remember { mutableStateOf(false) }

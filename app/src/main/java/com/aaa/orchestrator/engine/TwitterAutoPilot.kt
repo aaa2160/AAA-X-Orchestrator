@@ -74,8 +74,13 @@ class TwitterAutoPilot(
                         el.focus();
                     } catch(e) {}
                     try {
-                        var opts = { bubbles: true, cancelable: true, view: window };
+                        var rect = el.getBoundingClientRect();
+                        var cx = rect.left + rect.width / 2;
+                        var cy = rect.top + rect.height / 2;
+                        var opts = { bubbles: true, cancelable: true, view: window, clientX: cx, clientY: cy };
+                        el.dispatchEvent(new PointerEvent('pointerdown', opts));
                         el.dispatchEvent(new MouseEvent('mousedown', opts));
+                        el.dispatchEvent(new PointerEvent('pointerup', opts));
                         el.dispatchEvent(new MouseEvent('mouseup', opts));
                         el.dispatchEvent(new MouseEvent('click', opts));
                     } catch(e) {}
