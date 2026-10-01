@@ -74,23 +74,24 @@ import java.util.*
 @Composable
 fun BrowserScreen(
     engine: OrchestratorEngine? = null,
-    activeUrl: String = "https://x.com/i/flow/signup",
+    isAutomationMode: Boolean = false,
+    activeUrl: String = if (isAutomationMode) "https://x.com/i/flow/signup" else "https://www.google.com",
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val focusManager = LocalFocusManager.current
 
-    // Hoisted Multi-Tab State from persistent BrowserTabManager
-    val tabs = BrowserTabManager.tabs
-    var activeTabIndex by BrowserTabManager.activeTabIndex
+    // Hoisted Multi-Tab State from persistent BrowserTabManager based on mode
+    val tabs = remember(isAutomationMode) { BrowserTabManager.getTabs(isAutomationMode) }
+    var activeTabIndex by remember(isAutomationMode) { BrowserTabManager.getActiveIndex(isAutomationMode) }
     var showTabSwitcher by remember { mutableStateOf(false) }
 
     // Navigation & Web State
-    val initialTab = BrowserTabManager.currentTab ?: tabs[0]
-    var currentUrl by remember { mutableStateOf(initialTab.url) }
-    var inputUrl by remember { mutableStateOf(initialTab.url) }
-    var pageTitle by remember { mutableStateOf(initialTab.title) }
+    val initialTab = BrowserTabManager.getCurrentTab(isAutomationMode) ?: tabs[0]
+    var currentUrl by remember(isAutomationMode) { mutableStateOf(initialTab.url) }
+    var inputUrl by remember(isAutomationMode) { mutableStateOf(initialTab.url) }
+    var pageTitle by remember(isAutomationMode) { mutableStateOf(initialTab.title) }
     var pageProgress by remember { mutableStateOf(0) }
     var isLoading by remember { mutableStateOf(false) }
     var canGoBack by remember { mutableStateOf(false) }
@@ -144,8 +145,8 @@ fun BrowserScreen(
     val currentBirthDate = remember { mutableStateOf(AccountProfileGenerator.generateBirthDate()) }
 
     // Active WebView reference & Container reference for multi-tab management
-    var activeWebView by remember { mutableStateOf<WebView?>(null) }
-    val webViewPool = BrowserTabManager.webViewPool
+    var activeWebView by remember(isAutomationMode) { mutableStateOf<WebView?>(null) }
+    val webViewPool = remember(isAutomationMode) { BrowserTabManager.getPool(isAutomationMode) }
     var containerLayout by remember { mutableStateOf<FrameLayout?>(null) }
 
     var pendingWebPermission by remember { mutableStateOf<PermissionRequest?>(null) }
@@ -483,7 +484,7 @@ fun BrowserScreen(
 
     // Auto-inject incoming OTP into Twitter signup form instantly and advance
     LaunchedEffect(latestOtp) {
-        if (!latestOtp.isNullOrBlank()) {
+        if (isAutomationMode && !latestOtp.isNullOrBlank()) {
             injectValueIntoInput(activeWebView, latestOtp!!)
             Toast.makeText(context, "Auto-filled verification code: $latestOtp", Toast.LENGTH_SHORT).show()
             runAutoPilotOnActiveTab()
@@ -559,7 +560,7 @@ fun BrowserScreen(
                         pageProgress = newProgress
                         isLoading = newProgress < 100
                     }
-                    if (newProgress >= 70) {
+                    if (isAutomationMode && newProgress >= 70) {
                         val currentWebUrl = view?.url ?: ""
                         if (currentWebUrl.contains("signup") || currentWebUrl.contains("flow") || currentWebUrl.contains("x.com")) {
                             val targetPhone = if (phoneNumber.isNotBlank()) phoneNumber else "+48459074091"
@@ -584,9 +585,7 @@ fun BrowserScreen(
                         }
                         val index = tabs.indexOfFirst { it.id == tab.id }
                         if (index != -1) {
-                            val updated = tabs.toMutableList()
-                            updated[index] = updated[index].copy(title = title)
-                            tabs = updated
+                            tabs[index].title = title
                         }
                     }
                 }
@@ -727,10 +726,9 @@ fun BrowserScreen(
                     // Update the tab's url and title so tab switcher stays accurate
                     val tabIndex = tabs.indexOfFirst { it.id == tab.id }
                     if (tabIndex != -1 && url != null) {
-                        val updated = tabs.toMutableList()
-                        val currentTitle = view?.title ?: updated[tabIndex].title
-                        updated[tabIndex] = updated[tabIndex].copy(url = url, title = currentTitle)
-                        tabs = updated
+                        val currentTitle = view?.title ?: tabs[tabIndex].title
+                        tabs[tabIndex].url = url
+                        tabs[tabIndex].title = currentTitle
                     }
 
                     // Apply cosmetic ad hiding
@@ -739,8 +737,8 @@ fun BrowserScreen(
                     // Inject location privacy spoof again for SPA navigation
                     view?.evaluateJavascript(geoPrivacyScript, null)
 
-                    // Inject Twitter AutoPilot if on signup/flow/challenge
-                    if (url != null && (url.contains("signup") || url.contains("flow") || url.contains("challenge") || url.contains("x.com"))) {
+                    // Inject Twitter AutoPilot ONLY if in automation mode on signup/flow/challenge
+                    if (isAutomationMode && url != null && (url.contains("signup") || url.contains("flow") || url.contains("challenge") || url.contains("x.com"))) {
                         val targetPhone = if (phoneNumber.isNotBlank()) phoneNumber else "+48459074091"
                         val script = TwitterAutoPilot.buildAutoPilotScript(
                             name = currentProfileName.value,
@@ -762,56 +760,31 @@ fun BrowserScreen(
 
     // Function to switch active tab WITHOUT reloading page state
     fun switchTab(newIndex: Int) {
-        if (newIndex in tabs.indices) {
-            val oldTab = tabs.getOrNull(activeTabIndex)
-            val newTab = tabs[newIndex]
-
-            // Get or create new webview
-            val newWebView = webViewPool[newTab.id] ?: run {
-                val created = createConfiguredWebView(context, newTab)
-                webViewPool[newTab.id] = created
-                containerLayout?.addView(created)
-                created
-            }
-
-            // Ensure properly attached
-            if (newWebView.parent != containerLayout) {
-                (newWebView.parent as? ViewGroup)?.removeView(newWebView)
-                containerLayout?.addView(newWebView)
-            }
-
-            // Manage visibility cleanly: ACTIVE is VISIBLE, all others are INVISIBLE (preserving layout!)
-            webViewPool.forEach { (tabId, wv) ->
-                if (tabId == newTab.id) {
-                    wv.visibility = View.VISIBLE
-                    wv.bringToFront()
-                } else {
-                    wv.visibility = View.INVISIBLE
-                }
-            }
-
-            activeTabIndex = newIndex
-            activeWebView = newWebView
-            currentUrl = newWebView.url ?: newTab.url
+        BrowserTabManager.switchTab(isAutomationMode, newIndex)
+        val current = BrowserTabManager.getCurrentTab(isAutomationMode)
+        val active = if (current != null) webViewPool[current.id] else null
+        if (active != null) {
+            activeWebView = active
+            currentUrl = active.url ?: tabs[newIndex].url
             inputUrl = currentUrl
-            pageTitle = newWebView.title ?: newTab.title
-            canGoBack = newWebView.canGoBack()
-            canGoForward = newWebView.canGoForward()
+            pageTitle = active.title ?: tabs[newIndex].title
+            canGoBack = active.canGoBack()
+            canGoForward = active.canGoForward()
             isLoading = false
         }
     }
 
     // Function to add a new tab
-    fun addNewTab(url: String = "https://x.com/i/flow/signup") {
-        BrowserTabManager.addNewTab(url)
+    fun addNewTab(url: String = if (isAutomationMode) "https://x.com/i/flow/signup" else "https://www.google.com") {
+        BrowserTabManager.addNewTab(isAutomationMode, url)
         switchTab(tabs.size - 1)
         showTabSwitcher = false
     }
 
     // Function to close a tab
     fun closeTab(index: Int) {
-        BrowserTabManager.closeTab(index)
-        switchTab(BrowserTabManager.activeTabIndex.value)
+        BrowserTabManager.closeTab(isAutomationMode, index)
+        switchTab(BrowserTabManager.getActiveIndex(isAutomationMode).value)
     }
 
     Column(
@@ -836,7 +809,8 @@ fun BrowserScreen(
                 // Home Button
                 IconButton(
                     onClick = {
-                        activeWebView?.loadUrl("https://x.com/i/flow/signup")
+                        val homeUrl = if (isAutomationMode) "https://x.com/i/flow/signup" else "https://www.google.com"
+                        activeWebView?.loadUrl(homeUrl)
                     },
                     modifier = Modifier.size(36.dp)
                 ) {
@@ -1479,14 +1453,14 @@ fun BrowserScreen(
                         )
 
                         // Initialize or reuse initial tab webview
-                        val initialTab = tabs.getOrNull(activeTabIndex) ?: tabs[0]
-                        val existingWv = webViewPool[initialTab.id]
+                        val currentTab = BrowserTabManager.getCurrentTab(isAutomationMode) ?: tabs[0]
+                        val existingWv = webViewPool[currentTab.id]
                         val initialWebView = if (existingWv != null) {
                             (existingWv.parent as? ViewGroup)?.removeView(existingWv)
                             existingWv
                         } else {
-                            val created = createConfiguredWebView(ctx, initialTab)
-                            webViewPool[initialTab.id] = created
+                            val created = createConfiguredWebView(ctx, currentTab)
+                            webViewPool[currentTab.id] = created
                             created
                         }
                         addView(initialWebView)
@@ -1503,19 +1477,20 @@ fun BrowserScreen(
                             layout.addView(wv)
                         }
                     }
-                    val currentTab = tabs.getOrNull(activeTabIndex)
-                    if (currentTab != null) {
-                        val active = webViewPool[currentTab.id]
-                        if (active != null && active.visibility != View.VISIBLE) {
-                            active.visibility = View.VISIBLE
-                            active.bringToFront()
-                        }
+                    val currentTab = BrowserTabManager.getCurrentTab(isAutomationMode) ?: tabs[0]
+                    val active = webViewPool[currentTab.id]
+                    if (active != null && active.visibility != View.VISIBLE) {
+                        active.visibility = View.VISIBLE
+                        active.bringToFront()
+                    }
+                    if (active != null) {
+                        activeWebView = active
                     }
                 }
             )
 
             // Floating 1-Tap AutoFill Registration Pill
-            val isTwitterSignup = currentUrl.contains("signup") || currentUrl.contains("flow") || currentUrl.contains("x.com")
+            val isTwitterSignup = isAutomationMode && (currentUrl.contains("signup") || currentUrl.contains("flow") || currentUrl.contains("x.com"))
             if (isTwitterSignup && !isFindInPageVisible && customVideoView == null) {
                 Surface(
                     shape = RoundedCornerShape(24.dp),

@@ -46,6 +46,7 @@ fun DashboardScreen(
     onStartClick: () -> Unit,
     onStopClick: () -> Unit,
     onOpenBrowser: () -> Unit = {},
+    onOpenAutomation: () -> Unit = {},
     onNavigateToVault: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
@@ -221,7 +222,7 @@ fun DashboardScreen(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 16.dp, vertical = 4.dp),
-            horizontalArrangement = Arrangement.spacedBy(10.dp)
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             FilledTonalButton(
                 onClick = onOpenBrowser,
@@ -233,11 +234,30 @@ fun DashboardScreen(
                     containerColor = SurfaceWhite,
                     contentColor = PrimaryBlue
                 ),
-                border = androidx.compose.foundation.BorderStroke(1.dp, BorderSubtle)
+                border = androidx.compose.foundation.BorderStroke(1.dp, BorderSubtle),
+                contentPadding = PaddingValues(horizontal = 4.dp, vertical = 4.dp)
             ) {
-                Icon(Icons.Default.Language, contentDescription = null, modifier = Modifier.size(18.dp))
-                Spacer(modifier = Modifier.width(6.dp))
-                Text("Open Browser", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                Icon(Icons.Default.Language, contentDescription = null, modifier = Modifier.size(16.dp))
+                Spacer(modifier = Modifier.width(4.dp))
+                Text("Browser", fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+            }
+
+            FilledTonalButton(
+                onClick = onOpenAutomation,
+                modifier = Modifier
+                    .weight(1f)
+                    .height(44.dp),
+                shape = RoundedCornerShape(12.dp),
+                colors = ButtonDefaults.filledTonalButtonColors(
+                    containerColor = SurfaceWhite,
+                    contentColor = if (metrics.isRunning) SuccessGreen else PrimaryBlue
+                ),
+                border = androidx.compose.foundation.BorderStroke(1.dp, BorderSubtle),
+                contentPadding = PaddingValues(horizontal = 4.dp, vertical = 4.dp)
+            ) {
+                Icon(Icons.Default.SmartToy, contentDescription = null, modifier = Modifier.size(16.dp))
+                Spacer(modifier = Modifier.width(4.dp))
+                Text("Auto Bot", fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
             }
 
             FilledTonalButton(
@@ -250,11 +270,12 @@ fun DashboardScreen(
                     containerColor = SurfaceWhite,
                     contentColor = PrimaryBlue
                 ),
-                border = androidx.compose.foundation.BorderStroke(1.dp, BorderSubtle)
+                border = androidx.compose.foundation.BorderStroke(1.dp, BorderSubtle),
+                contentPadding = PaddingValues(horizontal = 4.dp, vertical = 4.dp)
             ) {
-                Icon(Icons.Default.Lock, contentDescription = null, modifier = Modifier.size(18.dp))
-                Spacer(modifier = Modifier.width(6.dp))
-                Text("View Vault", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                Icon(Icons.Default.Lock, contentDescription = null, modifier = Modifier.size(16.dp))
+                Spacer(modifier = Modifier.width(4.dp))
+                Text("Vault", fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
             }
         }
 

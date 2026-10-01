@@ -9,10 +9,13 @@ All notable changes and architectural configurations for this project are docume
   - Completely resolved the issue where the browser was overlaying and intercepting touches on all tabs.
   - Removed the persistent full-screen `Box` with `zIndex` and `alpha = 0f` that was blocking Compose touch events on Dashboard, Vault, and Settings.
   - Routed each navigation tab directly: `NavTab.Dashboard` renders `DashboardScreen`, `NavTab.Vault` renders `VaultScreen`, `NavTab.Browser` renders `BrowserScreen`, and `NavTab.Settings` renders `SettingsScreen`.
-- **Hoisted Tab & WebView Lifecycle ([`BrowserTabManager.kt`](file:///root/project/AAAX/app/src/main/java/com/aaa/orchestrator/engine/BrowserTabManager.kt), [`BrowserScreen.kt`](file:///root/project/AAAX/app/src/main/java/com/aaa/orchestrator/ui/screens/BrowserScreen.kt))**:
-  - Implemented `BrowserTabManager` singleton object to hold `tabs`, `activeTabIndex`, `webViewPool`, `bookmarks`, and `history`.
-  - Preserved WebViews, DOM tree, form inputs, session cookies, and video sessions across screen transitions without reloading or data loss.
-  - Safely detaches WebViews from containers when navigating away and reattaches them instantly upon return.
+- **Dual Browser Architecture ([`BrowserTabManager.kt`](file:///root/project/AAAX/app/src/main/java/com/aaa/orchestrator/engine/BrowserTabManager.kt), [`BrowserScreen.kt`](file:///root/project/AAAX/app/src/main/java/com/aaa/orchestrator/ui/screens/BrowserScreen.kt), [`MainActivity.kt`](file:///root/project/AAAX/app/src/main/java/com/aaa/orchestrator/MainActivity.kt))**:
+  - Split browser functionality into 2 completely independent, isolated browsers:
+    1. **Normal Everyday Browser (`NavTab.Browser`)**: Dedicated to user's daily browsing, Google search, streaming video, bookmarks, and tabs. Features open-source MX Player enhancements (200% volume boost, aspect ratio switcher, gesture brightness/volume, stream downloader). Strictly free of any automation scripts, form hijacking, or bot popups.
+    2. **Dedicated Automation Browser (`NavTab.Automation` - "Auto Bot")**: Dedicated to autonomous Twitter/X signup flows, AutoPilot React 18 DOM scripts, automatic OTP injection, stealth proxy routing, and biometric KYC face verification camera prompt.
+  - Hoisted state via `BrowserTabManager` maintaining separate `normalTabs`/`normalWebViewPool` and `autoTabs`/`autoWebViewPool`.
+  - Added 5-tab Material 3 bottom navigation: `Dashboard`, `Browser`, `Auto Bot`, `Vault`, and `Settings`.
+  - Fixed Kotlin snapshot state mutation compilation errors on `tabs[index].title` and `tabs[index].url`.
 
 ### Added & Multi-Cloud Expansion
 - **Turso libSQL Edge SQLite Integration ([`CloudIntegrationEngine.kt`](file:///root/project/AAAX/app/src/main/java/com/aaa/orchestrator/engine/CloudIntegrationEngine.kt), [`CloudSyncRepository.kt`](file:///root/project/AAAX/app/src/main/java/com/aaa/orchestrator/data/repository/CloudSyncRepository.kt))**:

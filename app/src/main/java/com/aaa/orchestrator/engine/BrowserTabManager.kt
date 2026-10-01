@@ -21,45 +21,58 @@ data class HistoryItem(
 )
 
 /**
- * Enterprise Browser State Manager.
- * Preserves active WebViews, tab DOM, inputs, and JavaScript sessions across
- * bottom navigation tab switching without reloads or data loss.
+ * Enterprise Dual-Browser State Manager.
+ * Maintains complete project isolation between:
+ * 1. Normal Everyday Web Browser (Google, video streaming, general browsing)
+ * 2. Dedicated Automation Browser (Twitter/X signup bot, AutoPilot injection, OTP verification)
  */
 object BrowserTabManager {
-    val tabs = mutableStateListOf<BrowserTab>()
-    val activeTabIndex = mutableStateOf(0)
-    val webViewPool = mutableMapOf<String, WebView>()
+    // Normal Browser Tabs & WebView Pool
+    val normalTabs = mutableStateListOf<BrowserTab>()
+    val normalActiveTabIndex = mutableStateOf(0)
+    val normalWebViewPool = mutableMapOf<String, WebView>()
+
+    // Automation Browser Tabs & WebView Pool
+    val autoTabs = mutableStateListOf<BrowserTab>()
+    val autoActiveTabIndex = mutableStateOf(0)
+    val autoWebViewPool = mutableMapOf<String, WebView>()
+
     val bookmarks = mutableStateListOf(
-        "https://x.com/i/flow/signup",
-        "https://x.com",
         "https://www.google.com",
-        "https://duckduckgo.com"
+        "https://duckduckgo.com",
+        "https://github.com",
+        "https://news.ycombinator.com"
     )
     val history = mutableStateListOf<HistoryItem>()
 
     init {
-        tabs.add(BrowserTab(url = "https://x.com/i/flow/signup", title = "X Signup"))
+        normalTabs.add(BrowserTab(url = "https://www.google.com", title = "Google"))
+        autoTabs.add(BrowserTab(url = "https://x.com/i/flow/signup", title = "X Signup Bot"))
     }
 
-    val currentTab: BrowserTab?
-        get() = tabs.getOrNull(activeTabIndex.value)
+    fun getTabs(isAutomation: Boolean) = if (isAutomation) autoTabs else normalTabs
+    fun getActiveIndex(isAutomation: Boolean) = if (isAutomation) autoActiveTabIndex else normalActiveTabIndex
+    fun getPool(isAutomation: Boolean) = if (isAutomation) autoWebViewPool else normalWebViewPool
 
-    fun getActiveWebView(): WebView? {
-        val tab = currentTab ?: return null
-        return webViewPool[tab.id]
+    fun getCurrentTab(isAutomation: Boolean): BrowserTab? {
+        val tabs = getTabs(isAutomation)
+        val idx = getActiveIndex(isAutomation).value
+        return tabs.getOrNull(idx)
     }
 
-    fun switchTab(newIndex: Int) {
+    fun switchTab(isAutomation: Boolean, newIndex: Int) {
+        val tabs = getTabs(isAutomation)
+        val pool = getPool(isAutomation)
+        val activeIdx = getActiveIndex(isAutomation)
+
         if (newIndex in tabs.indices) {
-            val oldTab = currentTab
+            val oldTab = tabs.getOrNull(activeIdx.value)
             val newTab = tabs[newIndex]
 
-            oldTab?.let {
-                webViewPool[it.id]?.visibility = View.INVISIBLE
-            }
+            oldTab?.let { pool[it.id]?.visibility = View.INVISIBLE }
 
-            activeTabIndex.value = newIndex
-            val newWv = webViewPool[newTab.id]
+            activeIdx.value = newIndex
+            val newWv = pool[newTab.id]
             if (newWv != null) {
                 newWv.visibility = View.VISIBLE
                 newWv.bringToFront()
@@ -67,34 +80,39 @@ object BrowserTabManager {
         }
     }
 
-    fun addNewTab(url: String = "https://x.com/i/flow/signup") {
-        val newTab = BrowserTab(url = url, title = "New Tab")
+    fun addNewTab(isAutomation: Boolean, url: String) {
+        val tabs = getTabs(isAutomation)
+        val newTab = BrowserTab(url = url, title = if (isAutomation) "X Automation" else "New Tab")
         tabs.add(newTab)
-        switchTab(tabs.size - 1)
+        switchTab(isAutomation, tabs.size - 1)
     }
 
-    fun closeTab(index: Int) {
+    fun closeTab(isAutomation: Boolean, index: Int) {
+        val tabs = getTabs(isAutomation)
+        val pool = getPool(isAutomation)
+        val activeIdx = getActiveIndex(isAutomation)
+
         if (tabs.size <= 1) {
-            // Keep at least one tab open
+            val fallbackUrl = if (isAutomation) "https://x.com/i/flow/signup" else "https://www.google.com"
             val tab = tabs[0]
-            tab.url = "https://x.com/i/flow/signup"
-            tab.title = "X Signup"
-            webViewPool[tab.id]?.loadUrl(tab.url)
+            tab.url = fallbackUrl
+            tab.title = if (isAutomation) "X Signup Bot" else "Google"
+            pool[tab.id]?.loadUrl(fallbackUrl)
             return
         }
 
         val closingTab = tabs[index]
-        val webViewToDestroy = webViewPool.remove(closingTab.id)
+        val webViewToDestroy = pool.remove(closingTab.id)
         (webViewToDestroy?.parent as? ViewGroup)?.removeView(webViewToDestroy)
         webViewToDestroy?.destroy()
 
         tabs.removeAt(index)
 
         val nextIndex = when {
-            activeTabIndex.value >= tabs.size -> tabs.size - 1
-            activeTabIndex.value > index -> activeTabIndex.value - 1
-            else -> activeTabIndex.value
+            activeIdx.value >= tabs.size -> tabs.size - 1
+            activeIdx.value > index -> activeIdx.value - 1
+            else -> activeIdx.value
         }
-        switchTab(nextIndex)
+        switchTab(isAutomation, nextIndex)
     }
 }

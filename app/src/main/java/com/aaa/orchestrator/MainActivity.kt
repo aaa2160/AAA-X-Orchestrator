@@ -34,8 +34,9 @@ import com.aaa.orchestrator.ui.theme.TextMuted
 
 sealed class NavTab(val title: String, val icon: ImageVector) {
     object Dashboard : NavTab("Dashboard", Icons.Default.Dashboard)
-    object Vault : NavTab("Vault", Icons.Default.Lock)
     object Browser : NavTab("Browser", Icons.Default.Language)
+    object Automation : NavTab("Auto Bot", Icons.Default.SmartToy)
+    object Vault : NavTab("Vault", Icons.Default.Lock)
     object Settings : NavTab("Settings", Icons.Default.Settings)
 }
 
@@ -108,8 +109,9 @@ class MainActivity : ComponentActivity() {
                         ) {
                             val items = listOf(
                                 NavTab.Dashboard,
-                                NavTab.Vault,
                                 NavTab.Browser,
+                                NavTab.Automation,
+                                NavTab.Vault,
                                 NavTab.Settings
                             )
                             items.forEach { tab ->
@@ -138,7 +140,7 @@ class MainActivity : ComponentActivity() {
                                     OrchestratorAccessibilityService.isAutomationRunning.set(true)
                                     OrchestratorForegroundService.start(this@MainActivity, "Autonomous Workflow Running")
                                     engine.startAutomation()
-                                    selectedTab = NavTab.Browser
+                                    selectedTab = NavTab.Automation
                                 },
                                 onStopClick = {
                                     OrchestratorAccessibilityService.isAutomationRunning.set(false)
@@ -146,7 +148,17 @@ class MainActivity : ComponentActivity() {
                                     OrchestratorForegroundService.stop(this@MainActivity)
                                 },
                                 onOpenBrowser = { selectedTab = NavTab.Browser },
+                                onOpenAutomation = { selectedTab = NavTab.Automation },
                                 onNavigateToVault = { selectedTab = NavTab.Vault },
+                                modifier = Modifier.fillMaxSize()
+                            )
+                            NavTab.Browser -> BrowserScreen(
+                                isAutomationMode = false,
+                                modifier = Modifier.fillMaxSize()
+                            )
+                            NavTab.Automation -> BrowserScreen(
+                                engine = engine,
+                                isAutomationMode = true,
                                 modifier = Modifier.fillMaxSize()
                             )
                             NavTab.Vault -> VaultScreen(
@@ -157,10 +169,6 @@ class MainActivity : ComponentActivity() {
                                 onClearAllAccounts = {
                                     scope.launch { accountRepo.deleteAllAccounts() }
                                 },
-                                modifier = Modifier.fillMaxSize()
-                            )
-                            NavTab.Browser -> BrowserScreen(
-                                engine = engine,
                                 modifier = Modifier.fillMaxSize()
                             )
                             NavTab.Settings -> SettingsScreen(
