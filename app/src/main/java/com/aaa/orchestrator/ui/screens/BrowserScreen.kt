@@ -93,11 +93,6 @@ fun BrowserScreen(
     var isDesktopMode by remember { mutableStateOf(false) }
     var showMenu by remember { mutableStateOf(false) }
 
-    // Chrome-Style Hardware Back Navigation: browse back before exiting tab
-    BackHandler(enabled = canGoBack) {
-        activeWebView?.goBack()
-    }
-
     // Tools & Bookmarks
     var showBookmarksHistory by remember { mutableStateOf(false) }
     var bookmarks by remember {
@@ -136,6 +131,11 @@ fun BrowserScreen(
     var activeWebView by remember { mutableStateOf<WebView?>(null) }
     val webViewPool = remember { mutableMapOf<String, WebView>() }
     var containerLayout by remember { mutableStateOf<FrameLayout?>(null) }
+
+    // Chrome-Style Hardware Back Navigation: browse back before exiting tab
+    BackHandler(enabled = canGoBack) {
+        activeWebView?.goBack()
+    }
 
     // AdBlock Engine
     val adBlockEngine = remember { AdBlockEngine(context) }
