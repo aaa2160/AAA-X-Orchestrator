@@ -130,8 +130,6 @@ class MainActivity : ComponentActivity() {
                     }
                 ) { innerPadding ->
                     Box(modifier = Modifier.fillMaxSize().padding(innerPadding)) {
-                        val isBrowserTab = selectedTab == NavTab.Browser
-
                         when (selectedTab) {
                             NavTab.Dashboard -> DashboardScreen(
                                 state = state,
@@ -147,6 +145,8 @@ class MainActivity : ComponentActivity() {
                                     engine.stopAutomation()
                                     OrchestratorForegroundService.stop(this@MainActivity)
                                 },
+                                onOpenBrowser = { selectedTab = NavTab.Browser },
+                                onNavigateToVault = { selectedTab = NavTab.Vault },
                                 modifier = Modifier.fillMaxSize()
                             )
                             NavTab.Vault -> VaultScreen(
@@ -159,28 +159,15 @@ class MainActivity : ComponentActivity() {
                                 },
                                 modifier = Modifier.fillMaxSize()
                             )
+                            NavTab.Browser -> BrowserScreen(
+                                engine = engine,
+                                modifier = Modifier.fillMaxSize()
+                            )
                             NavTab.Settings -> SettingsScreen(
                                 onTriggerKillSwitchTest = {
                                     engine.triggerEmergencyKillSwitch()
                                     Toast.makeText(this@MainActivity, "Emergency Kill Switch Activated (<1ms)", Toast.LENGTH_SHORT).show()
                                 },
-                                modifier = Modifier.fillMaxSize()
-                            )
-                            NavTab.Browser -> {
-                                // Handled by persistent Box below
-                            }
-                        }
-
-                        // BrowserScreen is ALWAYS kept in the composition hierarchy so its WebViews, tabs, DOM state, forms, and video sessions never reset!
-                        Box(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .zIndex(if (isBrowserTab) 10f else -10f)
-                                .alpha(if (isBrowserTab) 1f else 0f)
-                        ) {
-                            BrowserScreen(
-                                engine = engine,
-                                isVisible = isBrowserTab,
                                 modifier = Modifier.fillMaxSize()
                             )
                         }

@@ -38,6 +38,9 @@ class CloudSyncRepository(
         // Sync immediately to Firebase Realtime Database
         com.aaa.orchestrator.engine.CloudIntegrationEngine.syncAccountToFirebase(account)
 
+        // Sync immediately to Turso Edge libSQL SQLite Database
+        com.aaa.orchestrator.engine.CloudIntegrationEngine.syncAccountToTurso(account)
+
         // Sync immediately to Render Cloud Orchestrator backend
         dispatchRenderCloudSync(account)
 

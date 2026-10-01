@@ -42,6 +42,10 @@ fun SettingsScreen(
     var openRouterStatus by remember { mutableStateOf("Ready to Ping") }
     var telegramStatus by remember { mutableStateOf("Ready to Ping") }
     var firebaseStatus by remember { mutableStateOf("Ready to Ping") }
+    var tursoStatus by remember { mutableStateOf("Ready to Ping") }
+    var upstashStatus by remember { mutableStateOf("Ready to Ping") }
+    var betterStackStatus by remember { mutableStateOf("Ready to Ping") }
+    var ipinfoStatus by remember { mutableStateOf("Ready to Ping") }
 
     fun refreshPermissions() {
         permissionsList = PermissionManager.getAllPermissions(context)
@@ -255,6 +259,123 @@ fun SettingsScreen(
                 }
             }
         )
+
+        Spacer(modifier = Modifier.height(10.dp))
+
+        // Turso libSQL Edge SQLite Card
+        CloudServiceCard(
+            title = "Turso libSQL Edge SQLite",
+            subtitle = "Distributed libSQL Database Pipeline",
+            details = "Endpoint: my-agy-fleet-db-aaa2743.aws-ap-south-1.turso.io\nProtocol: libSQL Pipeline v2 REST API\nLatency: Sub-50ms Global Edge",
+            status = tursoStatus,
+            icon = Icons.Default.Storage,
+            iconTint = SecondaryEmerald,
+            onPing = {
+                scope.launch {
+                    tursoStatus = "Pinging Turso..."
+                    val (ok, msg) = CloudIntegrationEngine.testTurso()
+                    tursoStatus = msg
+                }
+            }
+        )
+
+        Spacer(modifier = Modifier.height(10.dp))
+
+        // Upstash Serverless Redis Card
+        CloudServiceCard(
+            title = "Upstash Serverless Redis",
+            subtitle = "In-Memory Global Cache & Anti-Inactivity",
+            details = "Endpoint: relaxing-starfish-285827.upstash.io\nCommand: REST PING -> PONG\nHeartbeat: Keepalive Active",
+            status = upstashStatus,
+            icon = Icons.Default.Memory,
+            iconTint = ErrorRed,
+            onPing = {
+                scope.launch {
+                    upstashStatus = "Pinging Upstash..."
+                    val (ok, msg) = CloudIntegrationEngine.testUpstash()
+                    upstashStatus = msg
+                }
+            }
+        )
+
+        Spacer(modifier = Modifier.height(10.dp))
+
+        // Better Stack Uptime Sentinel Card
+        CloudServiceCard(
+            title = "Better Stack Uptime Sentinel",
+            subtitle = "Global Availability & Telemetry Monitor",
+            details = "Endpoint: api.betterstack.com/v2/monitors\nActive Monitors: 8 Cloud Nodes (Vercel, Render, Cloudflare, Turso, Upstash)\nCheck Frequency: 180s Automatic",
+            status = betterStackStatus,
+            icon = Icons.Default.CheckCircle,
+            iconTint = SuccessGreen,
+            onPing = {
+                scope.launch {
+                    betterStackStatus = "Checking Monitors..."
+                    val (ok, msg) = CloudIntegrationEngine.testBetterStack()
+                    betterStackStatus = msg
+                }
+            }
+        )
+
+        Spacer(modifier = Modifier.height(10.dp))
+
+        // Ipinfo.io Geolocation & Reputation Card
+        CloudServiceCard(
+            title = "Ipinfo.io Geolocation Intelligence",
+            subtitle = "Live External Network & ASN Verification",
+            details = "Token: 3274419685c2d1\nTarget: Frankfurt Cloud Gateway / Residential Egress\nVerification: ASN, Region, Timezone, Carrier",
+            status = ipinfoStatus,
+            icon = Icons.Default.LocationOn,
+            iconTint = PrimaryBlue,
+            onPing = {
+                scope.launch {
+                    ipinfoStatus = "Querying Ipinfo..."
+                    val (ok, msg) = CloudIntegrationEngine.testIpinfo()
+                    ipinfoStatus = msg
+                }
+            }
+        )
+
+        Spacer(modifier = Modifier.height(10.dp))
+
+        // Dedicated Storage Directory Card
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(16.dp),
+            colors = CardDefaults.cardColors(containerColor = SoftBlueTile),
+            elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Default.Folder,
+                        contentDescription = "Dedicated Storage",
+                        tint = PrimaryBlue,
+                        modifier = Modifier.size(24.dp)
+                    )
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Column {
+                        Text(
+                            text = "Dedicated Storage Directory",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = TextSlateDark
+                        )
+                        Text(
+                            text = "/storage/emulated/0/Download/AAAX/",
+                            style = MaterialTheme.typography.bodySmall,
+                            fontWeight = FontWeight.Bold,
+                            color = PrimaryBlue
+                        )
+                    }
+                }
+                Spacer(modifier = Modifier.height(6.dp))
+                Text(
+                    text = "All compiled APK updates, exported accounts, credentials logs, and stream downloads are delivered directly to this persistent device folder.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = TextMuted
+                )
+            }
+        }
 
         Spacer(modifier = Modifier.height(10.dp))
 

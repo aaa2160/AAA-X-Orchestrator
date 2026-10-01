@@ -61,45 +61,36 @@ import com.aaa.orchestrator.engine.FaceVerificationNotifier
 import com.aaa.orchestrator.engine.OrchestratorEngine
 import com.aaa.orchestrator.engine.TwitterAutoPilot
 import com.aaa.orchestrator.ui.theme.*
+import com.aaa.orchestrator.engine.BrowserTabManager
+import com.aaa.orchestrator.engine.BrowserTab
+import com.aaa.orchestrator.engine.HistoryItem
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 import timber.log.Timber
 import java.text.SimpleDateFormat
 import java.util.*
 
-data class BrowserTab(
-    val id: String = UUID.randomUUID().toString(),
-    var url: String,
-    var title: String = "New Tab"
-)
-
-data class HistoryItem(
-    val url: String,
-    val title: String,
-    val timestamp: String = SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date())
-)
-
 @SuppressLint("SetJavaScriptEnabled")
 @Composable
 fun BrowserScreen(
     engine: OrchestratorEngine? = null,
     activeUrl: String = "https://x.com/i/flow/signup",
-    isVisible: Boolean = true,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val focusManager = LocalFocusManager.current
 
-    // Multi-Tab State
-    var tabs by remember { mutableStateOf(listOf(BrowserTab(url = activeUrl, title = "X Signup"))) }
-    var activeTabIndex by remember { mutableStateOf(0) }
+    // Hoisted Multi-Tab State from persistent BrowserTabManager
+    val tabs = BrowserTabManager.tabs
+    var activeTabIndex by BrowserTabManager.activeTabIndex
     var showTabSwitcher by remember { mutableStateOf(false) }
 
     // Navigation & Web State
-    var currentUrl by remember { mutableStateOf(activeUrl) }
-    var inputUrl by remember { mutableStateOf(activeUrl) }
-    var pageTitle by remember { mutableStateOf("X Signup") }
+    val initialTab = BrowserTabManager.currentTab ?: tabs[0]
+    var currentUrl by remember { mutableStateOf(initialTab.url) }
+    var inputUrl by remember { mutableStateOf(initialTab.url) }
+    var pageTitle by remember { mutableStateOf(initialTab.title) }
     var pageProgress by remember { mutableStateOf(0) }
     var isLoading by remember { mutableStateOf(false) }
     var canGoBack by remember { mutableStateOf(false) }
@@ -129,17 +120,8 @@ fun BrowserScreen(
 
     // Tools & Bookmarks
     var showBookmarksHistory by remember { mutableStateOf(false) }
-    var bookmarks by remember {
-        mutableStateOf(
-            mutableSetOf(
-                "https://x.com/i/flow/signup",
-                "https://x.com",
-                "https://www.google.com",
-                "https://duckduckgo.com"
-            )
-        )
-    }
-    var history by remember { mutableStateOf(mutableListOf<HistoryItem>()) }
+    val bookmarks = BrowserTabManager.bookmarks
+    val history = BrowserTabManager.history
 
     // Sleek Auto-Pilot HUD State (Collapsed by default for Chrome-like clean browsing)
     var isHudVisible by remember { mutableStateOf(false) }
@@ -163,17 +145,11 @@ fun BrowserScreen(
 
     // Active WebView reference & Container reference for multi-tab management
     var activeWebView by remember { mutableStateOf<WebView?>(null) }
-    val webViewPool = remember { mutableMapOf<String, WebView>() }
+    val webViewPool = BrowserTabManager.webViewPool
     var containerLayout by remember { mutableStateOf<FrameLayout?>(null) }
 
     var pendingWebPermission by remember { mutableStateOf<PermissionRequest?>(null) }
     var fileUploadCallback by remember { mutableStateOf<ValueCallback<Array<Uri>>?>(null) }
-
-    LaunchedEffect(isVisible) {
-        if (activeWebView != null) {
-            activeWebView?.visibility = if (isVisible) View.VISIBLE else View.INVISIBLE
-        }
-    }
 
     val cameraLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestMultiplePermissions()
@@ -827,38 +803,15 @@ fun BrowserScreen(
 
     // Function to add a new tab
     fun addNewTab(url: String = "https://x.com/i/flow/signup") {
-        val newTab = BrowserTab(url = url, title = "New Tab")
-        tabs = tabs + newTab
+        BrowserTabManager.addNewTab(url)
         switchTab(tabs.size - 1)
         showTabSwitcher = false
     }
 
     // Function to close a tab
     fun closeTab(index: Int) {
-        if (tabs.size <= 1) {
-            // Keep at least one tab open
-            val tab = tabs[0]
-            tab.url = "https://x.com/i/flow/signup"
-            tab.title = "X Signup"
-            webViewPool[tab.id]?.loadUrl(tab.url)
-            return
-        }
-
-        val closingTab = tabs[index]
-        val webViewToDestroy = webViewPool.remove(closingTab.id)
-        containerLayout?.removeView(webViewToDestroy)
-        webViewToDestroy?.destroy()
-
-        val updatedTabs = tabs.toMutableList()
-        updatedTabs.removeAt(index)
-        tabs = updatedTabs
-
-        val nextIndex = when {
-            activeTabIndex >= tabs.size -> tabs.size - 1
-            activeTabIndex > index -> activeTabIndex - 1
-            else -> activeTabIndex
-        }
-        switchTab(nextIndex)
+        BrowserTabManager.closeTab(index)
+        switchTab(BrowserTabManager.activeTabIndex.value)
     }
 
     Column(

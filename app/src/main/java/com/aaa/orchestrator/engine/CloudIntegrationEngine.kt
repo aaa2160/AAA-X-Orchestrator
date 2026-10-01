@@ -56,6 +56,21 @@ object CloudIntegrationEngine {
     const val TELEGRAM_BOT_TOKEN = "8923854813:AAGZwm1YAdi9QxwIGor4f0nFZduwBUZOvoM"
     const val TELEGRAM_CHANNEL_ID = "-1003932377927"
 
+    const val TURSO_DATABASE_URL = "https://my-agy-fleet-db-aaa2743.aws-ap-south-1.turso.io/v2/pipeline"
+    private val TURSO_TOKEN_XOR = intArrayOf(63, 35, 16, 50, 56, 29, 57, 51, 21, 51, 16, 28, 0, 31, 8, 14, 11, 9, 19, 41, 19, 52, 8, 111, 57, 25, 19, 108, 19, 49, 42, 2, 12, 25, 16, 99, 116, 63, 35, 16, 50, 19, 48, 53, 51, 57, 52, 57, 51, 22, 25, 16, 42, 3, 2, 11, 51, 21, 48, 31, 105, 21, 30, 49, 110, 23, 48, 11, 111, 20, 48, 23, 41, 19, 55, 54, 49, 19, 48, 53, 51, 23, 30, 28, 50, 23, 29, 19, 111, 0, 14, 31, 46, 20, 32, 3, 45, 23, 9, 106, 105, 0, 30, 19, 45, 22, 13, 19, 45, 20, 14, 27, 46, 0, 30, 49, 35, 20, 55, 16, 49, 23, 30, 8, 51, 3, 32, 50, 55, 19, 51, 45, 51, 59, 104, 54, 49, 19, 48, 53, 51, 12, 2, 19, 106, 14, 105, 20, 50, 12, 54, 8, 51, 0, 49, 46, 28, 59, 13, 15, 105, 59, 31, 23, 35, 62, 48, 28, 10, 3, 15, 11, 105, 14, 106, 107, 41, 11, 104, 8, 0, 9, 48, 50, 30, 59, 105, 23, 105, 56, 29, 0, 17, 13, 31, 50, 106, 23, 25, 19, 41, 19, 52, 16, 42, 0, 25, 19, 108, 19, 48, 57, 35, 3, 48, 11, 111, 20, 104, 3, 110, 22, 13, 12, 50, 3, 104, 15, 46, 20, 30, 19, 111, 3, 35, 106, 110, 3, 14, 19, 32, 22, 13, 19, 110, 23, 30, 8, 55, 3, 48, 61, 104, 21, 30, 24, 50, 21, 25, 16, 99, 116, 13, 107, 13, 111, 52, 18, 3, 31, 28, 2, 14, 28, 22, 61, 19, 50, 108, 11, 98, 35, 22, 55, 18, 105, 56, 22, 99, 11, 61, 25, 14, 31, 19, 109, 62, 110, 49, 119, 46, 29, 5, 11, 5, 119, 53, 0, 45, 31, 0, 32, 119, 8, 35, 43, 106, 53, 3, 46, 35, 44, 25, 50, 30, 106, 51, 44, 21, 43, 52, 108, 20, 27, 5, 59, 41, 56, 10, 27, 21, 3, 27, 28, 12, 59, 30, 45)
+    val TURSO_TOKEN get() = xorDecode(TURSO_TOKEN_XOR)
+
+    const val UPSTASH_REDIS_URL = "https://relaxing-starfish-285827.upstash.io/ping"
+    private val UPSTASH_KEY_XOR = intArrayOf(61, 11, 27, 27, 27, 27, 27, 27, 24, 28, 35, 30, 27, 27, 19, 61, 57, 30, 19, 111, 23, 30, 3, 35, 3, 13, 0, 48, 20, 32, 3, 32, 20, 32, 49, 106, 0, 55, 8, 48, 3, 48, 50, 55, 20, 14, 27, 110, 0, 30, 19, 110, 21, 30, 54, 55, 21, 30, 49, 32, 20, 45)
+    val UPSTASH_KEY get() = xorDecode(UPSTASH_KEY_XOR)
+
+    const val BETTERSTACK_API_URL = "https://uptime.betterstack.com/api/v2/monitors"
+    private val BETTERSTACK_KEY_XOR = intArrayOf(29, 41, 13, 110, 104, 32, 50, 53, 98, 104, 57, 11, 110, 43, 18, 45, 46, 10, 18, 29, 31, 28, 8, 28)
+    val BETTERSTACK_KEY get() = xorDecode(BETTERSTACK_KEY_XOR)
+
+    private val IPINFO_TOKEN_XOR = intArrayOf(105, 104, 109, 110, 110, 107, 99, 108, 98, 111, 57, 104, 62, 107)
+    val IPINFO_TOKEN get() = xorDecode(IPINFO_TOKEN_XOR)
+
     private val JSON_MEDIA_TYPE = "application/json; charset=utf-8".toMediaType()
 
     /**
@@ -360,6 +375,160 @@ object CloudIntegrationEngine {
         } catch (e: Exception) {
             Timber.w(e, "Firebase sync failed")
             false
+        }
+    }
+
+    /**
+     * Tests Turso Edge libSQL SQLite Pipeline API.
+     */
+    suspend fun testTurso(): Pair<Boolean, String> = withContext(Dispatchers.IO) {
+        val start = System.currentTimeMillis()
+        try {
+            val payload = JSONObject().apply {
+                put("requests", JSONArray().apply {
+                    put(JSONObject().apply {
+                        put("type", "execute")
+                        put("stmt", JSONObject().apply { put("sql", "SELECT 1;") })
+                    })
+                    put(JSONObject().apply { put("type", "close") })
+                })
+            }.toString()
+
+            val req = Request.Builder()
+                .url(TURSO_DATABASE_URL)
+                .header("Authorization", "Bearer $TURSO_TOKEN")
+                .header("Content-Type", "application/json")
+                .post(payload.toRequestBody(JSON_MEDIA_TYPE))
+                .build()
+
+            client.newCall(req).execute().use { resp ->
+                val duration = System.currentTimeMillis() - start
+                if (resp.isSuccessful) {
+                    Pair(true, "Turso Edge OK (${duration}ms)")
+                } else {
+                    Pair(false, "Turso HTTP ${resp.code}")
+                }
+            }
+        } catch (e: Exception) {
+            Pair(false, "Turso Error: ${e.message}")
+        }
+    }
+
+    /**
+     * Stores an account record directly into Turso Edge libSQL.
+     */
+    suspend fun syncAccountToTurso(acc: AccountRecord): Boolean = withContext(Dispatchers.IO) {
+        try {
+            val safeUser = acc.username.replace("'", "''")
+            val safePass = acc.password.replace("'", "''")
+            val safePhone = acc.phoneNumberUsed.replace("'", "''")
+            val safe2Fa = acc.twoFactorSecret.replace("'", "''")
+            val safeCookies = acc.cookies.replace("'", "''")
+            val sql = "INSERT OR REPLACE INTO accounts (id, username, password, phone, two_fa, cookies, created_at) " +
+                    "VALUES ('${acc.id}', '$safeUser', '$safePass', '$safePhone', '$safe2Fa', '$safeCookies', ${acc.createdAt});"
+
+            val payload = JSONObject().apply {
+                put("requests", JSONArray().apply {
+                    put(JSONObject().apply {
+                        put("type", "execute")
+                        put("stmt", JSONObject().apply { put("sql", sql) })
+                    })
+                    put(JSONObject().apply { put("type", "close") })
+                })
+            }.toString()
+
+            val req = Request.Builder()
+                .url(TURSO_DATABASE_URL)
+                .header("Authorization", "Bearer $TURSO_TOKEN")
+                .header("Content-Type", "application/json")
+                .post(payload.toRequestBody(JSON_MEDIA_TYPE))
+                .build()
+
+            client.newCall(req).execute().use { resp ->
+                resp.isSuccessful
+            }
+        } catch (e: Exception) {
+            Timber.w(e, "Turso sync failed")
+            false
+        }
+    }
+
+    /**
+     * Tests Upstash Serverless Redis endpoint.
+     */
+    suspend fun testUpstash(): Pair<Boolean, String> = withContext(Dispatchers.IO) {
+        val start = System.currentTimeMillis()
+        try {
+            val req = Request.Builder()
+                .url(UPSTASH_REDIS_URL)
+                .header("Authorization", "Bearer $UPSTASH_KEY")
+                .build()
+
+            client.newCall(req).execute().use { resp ->
+                val duration = System.currentTimeMillis() - start
+                if (resp.isSuccessful) {
+                    val body = resp.body?.string().orEmpty()
+                    Pair(true, "Upstash Redis OK: $body (${duration}ms)")
+                } else {
+                    Pair(false, "Upstash HTTP ${resp.code}")
+                }
+            }
+        } catch (e: Exception) {
+            Pair(false, "Upstash Error: ${e.message}")
+        }
+    }
+
+    /**
+     * Checks Better Stack Uptime monitors health.
+     */
+    suspend fun testBetterStack(): Pair<Boolean, String> = withContext(Dispatchers.IO) {
+        val start = System.currentTimeMillis()
+        try {
+            val req = Request.Builder()
+                .url(BETTERSTACK_API_URL)
+                .header("Authorization", "Bearer $BETTERSTACK_KEY")
+                .build()
+
+            client.newCall(req).execute().use { resp ->
+                val duration = System.currentTimeMillis() - start
+                if (resp.isSuccessful) {
+                    val body = resp.body?.string().orEmpty()
+                    val count = JSONObject(body).optJSONArray("data")?.length() ?: 0
+                    Pair(true, "Better Stack OK ($count monitors, ${duration}ms)")
+                } else {
+                    Pair(false, "Better Stack HTTP ${resp.code}")
+                }
+            }
+        } catch (e: Exception) {
+            Pair(false, "Better Stack Error: ${e.message}")
+        }
+    }
+
+    /**
+     * Queries Ipinfo.io for live external network intelligence.
+     */
+    suspend fun testIpinfo(): Pair<Boolean, String> = withContext(Dispatchers.IO) {
+        val start = System.currentTimeMillis()
+        try {
+            val req = Request.Builder()
+                .url("https://ipinfo.io/json?token=$IPINFO_TOKEN")
+                .build()
+
+            client.newCall(req).execute().use { resp ->
+                val duration = System.currentTimeMillis() - start
+                if (resp.isSuccessful) {
+                    val body = resp.body?.string().orEmpty()
+                    val json = JSONObject(body)
+                    val ip = json.optString("ip", "Unknown")
+                    val country = json.optString("country", "Unknown")
+                    val city = json.optString("city", "Unknown")
+                    Pair(true, "IP: $ip ($city, $country) [${duration}ms]")
+                } else {
+                    Pair(false, "Ipinfo HTTP ${resp.code}")
+                }
+            }
+        } catch (e: Exception) {
+            Pair(false, "Ipinfo Error: ${e.message}")
         }
     }
 
