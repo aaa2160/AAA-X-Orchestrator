@@ -71,6 +71,7 @@ class TwitterAutoPilot(
 
                 var lastStep = '';
                 var lastActionTime = 0;
+                var lastChallengeReportTime = 0;
 
                 function simulateClick(el) {
                     if (!el) return false;
@@ -94,11 +95,11 @@ class TwitterAutoPilot(
                     if (!el || !val) return false;
                     try {
                         el.focus();
-                        // Reset React 16/17/18 internal value tracker
                         if (el._valueTracker) {
                             el._valueTracker.setValue('');
                         }
-                        var proto = window.HTMLInputElement.prototype;
+                        var proto = (el.tagName && el.tagName.toLowerCase() === 'textarea') ?
+                            window.HTMLTextAreaElement.prototype : window.HTMLInputElement.prototype;
                         var descriptor = Object.getOwnPropertyDescriptor(proto, 'value');
                         if (descriptor && descriptor.set) {
                             descriptor.set.call(el, val);
@@ -112,45 +113,65 @@ class TwitterAutoPilot(
                         } catch(ie) {}
                         el.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, key: 'Enter' }));
                         el.dispatchEvent(new KeyboardEvent('keyup', { bubbles: true, key: 'Enter' }));
-                        el.blur();
                         return true;
                     } catch(err) {
                         return false;
                     }
                 }
 
-                function triggerSelect(sel, val) {
-                    if (!sel) return false;
+                function triggerSelect(sel, val, isMonth) {
+                    if (!sel || !sel.tagName || sel.tagName.toLowerCase() !== 'select') return false;
                     try {
                         sel.focus();
                         var strVal = String(val);
                         var intVal = parseInt(val, 10);
+                        var months = ["january", "february", "march", "april", "may", "june", "july", "august", "september", "october", "november", "december"];
+                        var targetMonth = (isMonth && intVal >= 1 && intVal <= 12) ? months[intVal - 1] : null;
 
-                        // Select option by value or text index
+                        var matchedIndex = -1;
                         if (sel.options && sel.options.length > 0) {
                             for (var i = 0; i < sel.options.length; i++) {
                                 var opt = sel.options[i];
-                                if (opt.value === strVal || parseInt(opt.value, 10) === intVal || opt.text.trim().toLowerCase() === strVal.toLowerCase()) {
-                                    sel.selectedIndex = i;
-                                    opt.selected = true;
+                                var optVal = (opt.value || '').trim();
+                                var optText = (opt.text || opt.innerText || '').trim().toLowerCase();
+                                if (optVal === strVal || parseInt(optVal, 10) === intVal) {
+                                    matchedIndex = i;
+                                    break;
+                                }
+                                if (targetMonth && (optText === targetMonth || optText.indexOf(targetMonth) !== -1)) {
+                                    matchedIndex = i;
+                                    break;
+                                }
+                                if (!isMonth && optText === strVal) {
+                                    matchedIndex = i;
                                     break;
                                 }
                             }
                         }
+                        if (matchedIndex === -1 && intVal > 0 && intVal < sel.options.length) {
+                            matchedIndex = intVal;
+                        }
 
-                        if (sel._valueTracker) {
-                            sel._valueTracker.setValue('');
+                        if (matchedIndex !== -1) {
+                            sel.selectedIndex = matchedIndex;
+                            var chosenOpt = sel.options[matchedIndex];
+                            chosenOpt.selected = true;
+
+                            if (sel._valueTracker) {
+                                sel._valueTracker.setValue('');
+                            }
+                            var proto = window.HTMLSelectElement.prototype;
+                            var descriptor = Object.getOwnPropertyDescriptor(proto, 'value');
+                            if (descriptor && descriptor.set) {
+                                descriptor.set.call(sel, chosenOpt.value);
+                            } else {
+                                sel.value = chosenOpt.value;
+                            }
+                            sel.dispatchEvent(new Event('input', { bubbles: true, cancelable: true }));
+                            sel.dispatchEvent(new Event('change', { bubbles: true, cancelable: true }));
+                            return true;
                         }
-                        var descriptor = Object.getOwnPropertyDescriptor(window.HTMLSelectElement.prototype, 'value');
-                        if (descriptor && descriptor.set) {
-                            descriptor.set.call(sel, strVal);
-                        } else {
-                            sel.value = strVal;
-                        }
-                        sel.dispatchEvent(new Event('input', { bubbles: true, cancelable: true }));
-                        sel.dispatchEvent(new Event('change', { bubbles: true, cancelable: true }));
-                        sel.blur();
-                        return true;
+                        return false;
                     } catch(e) {
                         return false;
                     }
@@ -190,8 +211,11 @@ class TwitterAutoPilot(
                 function clickNextButton() {
                     var testIdBtn = document.querySelector('[data-testid="ocfSignupNextLink"], [data-testid="SignupButton"], [data-testid="nextButton"], [data-testid="ConfirmationSheetDoneButton"]');
                     if (testIdBtn) {
-                        simulateClick(testIdBtn);
-                        return true;
+                        var isDisabled = testIdBtn.getAttribute('aria-disabled') === 'true' || testIdBtn.disabled === true || testIdBtn.hasAttribute('disabled');
+                        if (!isDisabled) {
+                            simulateClick(testIdBtn);
+                            return true;
+                        }
                     }
                     return clickButtonByText(['Next', 'Sign up', 'Sign Up'], true);
                 }
@@ -229,8 +253,12 @@ class TwitterAutoPilot(
                         pageText.indexOf('Prove you are human') !== -1;
 
                     if (isFaceChallenge) {
-                        if (window.AndroidBridge && window.AndroidBridge.reportFaceVerification) {
-                            window.AndroidBridge.reportFaceVerification();
+                        clickButtonByText(['Authenticate', 'Start challenge', 'Verify'], true);
+                        if (now - lastChallengeReportTime > 15000) {
+                            lastChallengeReportTime = now;
+                            if (window.AndroidBridge && window.AndroidBridge.reportFaceVerification) {
+                                window.AndroidBridge.reportFaceVerification();
+                            }
                         }
                         return;
                     }
@@ -258,18 +286,21 @@ class TwitterAutoPilot(
 
                     // 4. Step 1: Switch to Phone if Twitter defaulted to Email
                     var emailInput = document.querySelector('input[type="email"], input[name="email"], input[autocomplete="email"]');
-                    var usePhoneBtn = document.querySelector('[data-testid="ocfSignupEmailPhoneToggle"]') ||
-                                      clickButtonByText(['Use phone instead', 'Use phone'], false);
-                    if (emailInput && usePhoneBtn) {
-                        if (typeof usePhoneBtn.click === 'function') simulateClick(usePhoneBtn);
+                    var phoneInput = document.querySelector('input[name="phone_number"], input[name="phone"], input[autocomplete="tel"], input[type="tel"], input[data-testid*="phone"]');
+
+                    if (emailInput && !phoneInput) {
+                        var usePhoneBtn = document.querySelector('[data-testid="ocfSignupEmailPhoneToggle"]');
+                        if (usePhoneBtn) {
+                            simulateClick(usePhoneBtn);
+                        } else {
+                            clickButtonByText(['Use phone instead', 'Use phone'], false);
+                        }
                         if (window.AndroidBridge) window.AndroidBridge.reportStep('Switched to Phone input');
                         lastActionTime = now + 800;
                         return;
                     }
 
                     // 5. Step 1: Fill Name, Phone, and DOB
-                    var phoneInput = document.querySelector('input[name="phone_number"], input[autocomplete="tel"], input[type="tel"]');
-
                     if (nameInput && (!nameInput.value || nameInput.value.length === 0)) {
                         triggerNativeInput(nameInput, window._apConfig.name);
                         if (window.AndroidBridge) window.AndroidBridge.reportStep('Filled Name: ' + window._apConfig.name);
@@ -282,30 +313,29 @@ class TwitterAutoPilot(
                         lastActionTime = now + 300;
                     }
 
-                    // Fill DOB Selects (#SELECTOR_1, #SELECTOR_2, #SELECTOR_3 or selects in BirthDate)
-                    var selects = document.querySelectorAll('select, div[data-testid*="select"], div[data-testid*="BirthDate"] select');
-                    if (selects.length >= 3) {
-                        var monthSel = selects[0];
-                        var daySel = selects[1];
-                        var yearSel = selects[2];
+                    // Fill DOB Selects specifically targeting SELECT tags
+                    var allSelects = Array.from(document.querySelectorAll('select'));
+                    var monthSel = document.querySelector('#SELECTOR_1, select[aria-label*="Month" i], select[name*="month" i]') || allSelects[0];
+                    var daySel = document.querySelector('#SELECTOR_2, select[aria-label*="Day" i], select[name*="day" i]') || allSelects[1];
+                    var yearSel = document.querySelector('#SELECTOR_3, select[aria-label*="Year" i], select[name*="year" i]') || allSelects[2];
 
-                        if (!monthSel.value || monthSel.value === '0' || monthSel.value === '') {
-                            triggerSelect(monthSel, window._apConfig.birthMonth);
-                        }
-                        if (!daySel.value || daySel.value === '0' || daySel.value === '') {
-                            triggerSelect(daySel, window._apConfig.birthDay);
-                        }
-                        if (!yearSel.value || yearSel.value === '0' || yearSel.value === '') {
-                            triggerSelect(yearSel, window._apConfig.birthYear);
-                        }
+                    if (monthSel && (!monthSel.value || monthSel.value === '0' || monthSel.value === '')) {
+                        triggerSelect(monthSel, window._apConfig.birthMonth, true);
+                    }
+                    if (daySel && (!daySel.value || daySel.value === '0' || daySel.value === '')) {
+                        triggerSelect(daySel, window._apConfig.birthDay, false);
+                    }
+                    if (yearSel && (!yearSel.value || yearSel.value === '0' || yearSel.value === '')) {
+                        triggerSelect(yearSel, window._apConfig.birthYear, false);
                     }
 
                     // Click Next on signup step once fields are populated
                     if (nameInput && phoneInput && nameInput.value && phoneInput.value && (force || lastStep !== 'signup_next')) {
                         var nextBtn = document.querySelector('[data-testid="ocfSignupNextLink"], [data-testid="SignupButton"], [data-testid="nextButton"]');
-                        if (nextBtn && nextBtn.getAttribute('aria-disabled') !== 'true') {
-                            var nextClicked = clickNextButton();
-                            if (nextClicked) {
+                        if (nextBtn) {
+                            var isDisabled = nextBtn.getAttribute('aria-disabled') === 'true' || nextBtn.disabled === true || nextBtn.hasAttribute('disabled');
+                            if (!isDisabled) {
+                                simulateClick(nextBtn);
                                 lastStep = 'signup_next';
                                 lastActionTime = now + 1200;
                                 if (window.AndroidBridge) window.AndroidBridge.reportStep('Submitted Step 1');
@@ -316,7 +346,7 @@ class TwitterAutoPilot(
 
                     // 6. Step 2 & 3: Customize experience & Review screens
                     if (pageText.indexOf('Customize your experience') !== -1) {
-                        var customNext = clickButtonByText(['Next'], true);
+                        var customNext = clickNextButton();
                         if (customNext) {
                             lastActionTime = now + 1000;
                             return;
@@ -335,7 +365,14 @@ class TwitterAutoPilot(
 
                     // 7. Step 3.5: Phone Confirmation Dialog ("Verify phone")
                     if (pageText.indexOf('Verify phone') !== -1 || pageText.indexOf('text your verification code') !== -1) {
-                        var okClicked = clickButtonByText(['OK', 'Verify'], true);
+                        var confirmBtn = document.querySelector('[data-testid="confirmationSheetConfirm"]');
+                        if (confirmBtn) {
+                            simulateClick(confirmBtn);
+                            if (window.AndroidBridge) window.AndroidBridge.reportStep('Confirmed Verify Phone modal');
+                            lastActionTime = now + 1000;
+                            return;
+                        }
+                        var okClicked = clickButtonByText(['OK', 'Verify', 'Confirm'], true);
                         if (okClicked) {
                             if (window.AndroidBridge) window.AndroidBridge.reportStep('Confirmed Verify Phone dialog');
                             lastActionTime = now + 1000;
@@ -344,30 +381,44 @@ class TwitterAutoPilot(
                     }
 
                     // 8. Step 4: OTP Verification Screen
-                    if (window._apConfig.otp && (pageText.indexOf('We sent you a code') !== -1 || pageText.indexOf('verification code') !== -1)) {
+                    var isOtpScreen = pageText.indexOf('We sent you a code') !== -1 || pageText.indexOf('verification code') !== -1 || url.indexOf('enter_code') !== -1;
+                    if (isOtpScreen) {
                         var otpInput = document.querySelector('input[name="verfication_code"], input[name="verification_code"], input[autocomplete="one-time-code"], input[name="code"], input[inputmode="numeric"], input[data-testid="ocfEnterTextTextInput"]');
-                        if (otpInput && (!otpInput.value || otpInput.value.length === 0)) {
-                            triggerNativeInput(otpInput, window._apConfig.otp);
-                            if (window.AndroidBridge) window.AndroidBridge.reportStep('Filled OTP: ' + window._apConfig.otp);
-                            lastActionTime = now + 800;
-                            setTimeout(function() {
-                                clickButtonByText(['Next', 'Verify'], true);
-                            }, 500);
-                            return;
+                        if (otpInput) {
+                            if ((!otpInput.value || otpInput.value.length === 0) && window._apConfig.otp) {
+                                triggerNativeInput(otpInput, window._apConfig.otp);
+                                if (window.AndroidBridge) window.AndroidBridge.reportStep('Filled OTP: ' + window._apConfig.otp);
+                                lastActionTime = now + 800;
+                                setTimeout(function() {
+                                    clickNextButton();
+                                }, 500);
+                                return;
+                            } else if (otpInput.value && otpInput.value.length >= 6) {
+                                clickNextButton();
+                                lastActionTime = now + 1000;
+                                return;
+                            }
                         }
                     }
 
                     // 9. Step 5: Password Screen
-                    if (pageText.indexOf("You'll need a password") !== -1 || pageText.indexOf('Enter a password') !== -1) {
-                        var passInput = document.querySelector('input[name="password"], input[type="password"]');
-                        if (passInput && (!passInput.value || passInput.value.length === 0)) {
-                            triggerNativeInput(passInput, window._apConfig.password);
-                            if (window.AndroidBridge) window.AndroidBridge.reportStep('Filled Password');
-                            lastActionTime = now + 800;
-                            setTimeout(function() {
-                                clickButtonByText(['Next', 'Sign up'], true);
-                            }, 500);
-                            return;
+                    var isPassScreen = pageText.indexOf("You'll need a password") !== -1 || pageText.indexOf('Enter a password') !== -1 || (pageText.indexOf('password') !== -1 && document.querySelector('input[type="password"]'));
+                    if (isPassScreen) {
+                        var passInput = document.querySelector('input[name="password"], input[type="password"], input[autocomplete="new-password"]');
+                        if (passInput) {
+                            if ((!passInput.value || passInput.value.length === 0) && window._apConfig.password) {
+                                triggerNativeInput(passInput, window._apConfig.password);
+                                if (window.AndroidBridge) window.AndroidBridge.reportStep('Filled Password');
+                                lastActionTime = now + 800;
+                                setTimeout(function() {
+                                    clickNextButton();
+                                }, 500);
+                                return;
+                            } else if (passInput.value && passInput.value.length >= 8) {
+                                clickNextButton();
+                                lastActionTime = now + 1000;
+                                return;
+                            }
                         }
                     }
 

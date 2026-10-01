@@ -635,10 +635,18 @@ fun BrowserScreen(
         }
     }
 
+    // Auto-trigger AutoPilot scan when a new verified phone number arrives
+    LaunchedEffect(phoneNumber) {
+        if (isAutomationMode && phoneNumber.isNotBlank()) {
+            Timber.i("New verified bot phone detected: $phoneNumber, executing AutoPilot on active tab")
+            runAutoPilotOnActiveTab()
+        }
+    }
+
     // Auto-inject incoming OTP into Twitter signup form instantly and advance
     LaunchedEffect(latestOtp) {
         if (isAutomationMode && !latestOtp.isNullOrBlank()) {
-            injectValueIntoInput(activeWebView, latestOtp!!)
+            injectValueIntoInput(activeWebView, latestOtp!!, "otp")
             Toast.makeText(context, "Auto-filled verification code: $latestOtp", Toast.LENGTH_SHORT).show()
             runAutoPilotOnActiveTab()
         }
@@ -1584,7 +1592,7 @@ fun BrowserScreen(
                                 modifier = Modifier
                                     .padding(end = 6.dp)
                                     .clickable {
-                                        injectValueIntoInput(activeWebView, latestOtp!!)
+                                        injectValueIntoInput(activeWebView, latestOtp!!, "otp")
                                         runAutoPilotOnActiveTab()
                                     }
                             ) {
@@ -1671,7 +1679,7 @@ fun BrowserScreen(
                             // Fill Password
                             OutlinedButton(
                                 onClick = {
-                                    injectValueIntoInput(activeWebView, password)
+                                    injectValueIntoInput(activeWebView, password, "password")
                                     runAutoPilotOnActiveTab()
                                 },
                                 shape = RoundedCornerShape(8.dp),
@@ -2449,13 +2457,18 @@ private fun copyToClipboard(context: Context, label: String, text: String) {
     Toast.makeText(context, "$label copied: $text", Toast.LENGTH_SHORT).show()
 }
 
-private fun injectValueIntoInput(webView: WebView?, value: String) {
-    if (webView == null) return
+private fun injectValueIntoInput(webView: WebView?, value: String, fieldType: String = "auto") {
+    if (webView == null || value.isBlank()) return
     val script = """
         (function() {
             var active = document.activeElement;
+            var targetType = '$fieldType';
             function triggerNative(el, val) {
+                if (!el) return false;
                 el.focus();
+                if (el._valueTracker) {
+                    el._valueTracker.setValue('');
+                }
                 var proto = window.HTMLInputElement.prototype;
                 var descriptor = Object.getOwnPropertyDescriptor(proto, 'value');
                 if (descriptor && descriptor.set) {
@@ -2468,6 +2481,18 @@ private fun injectValueIntoInput(webView: WebView?, value: String) {
                 try {
                     el.dispatchEvent(new InputEvent('input', { bubbles: true, cancelable: true, inputType: 'insertText', data: val }));
                 } catch(e) {}
+                return true;
+            }
+
+            if (targetType === 'otp') {
+                var otpInput = document.querySelector('input[name="verfication_code"], input[name="verification_code"], input[autocomplete="one-time-code"], input[data-testid*="verification"], input[inputmode="numeric"]');
+                if (otpInput && triggerNative(otpInput, '$value')) return 'otp_filled';
+            } else if (targetType === 'phone') {
+                var phoneInput = document.querySelector('input[name="phone_number"], input[type="tel"], input[autocomplete="tel"]');
+                if (phoneInput && triggerNative(phoneInput, '$value')) return 'phone_filled';
+            } else if (targetType === 'password') {
+                var passInput = document.querySelector('input[name="password"], input[type="password"], input[autocomplete="new-password"], input[autocomplete="current-password"]');
+                if (passInput && triggerNative(passInput, '$value')) return 'password_filled';
             }
 
             if (active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA')) {

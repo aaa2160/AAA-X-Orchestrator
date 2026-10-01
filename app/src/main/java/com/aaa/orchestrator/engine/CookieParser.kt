@@ -16,6 +16,14 @@ object CookieParser {
     }
 
     /**
+     * Extracts the specific auth_token value for session deduplication.
+     */
+    fun extractAuthToken(cookieString: String): String? {
+        val regex = Regex("auth_token=([^;]+)")
+        return regex.find(cookieString)?.groupValues?.get(1)?.trim()
+    }
+
+    /**
      * Converts a standard semicolon-separated cookie header into AdsPower / Dolphin Anty JSON format.
      */
     fun toJsonAntiDetectFormat(cookieString: String, domain: String = ".x.com"): String {

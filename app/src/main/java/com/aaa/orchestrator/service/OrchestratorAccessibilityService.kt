@@ -24,6 +24,7 @@ class OrchestratorAccessibilityService : AccessibilityService() {
     }
 
     private var lastDetectedPhone: String? = null
+    private var lastDetectedOtp: String? = null
     private var lastBotClickTime = 0L
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
@@ -68,9 +69,14 @@ class OrchestratorAccessibilityService : AccessibilityService() {
         // Step A: Find and automatically click "+ GET NUMBER" if available
         val now = System.currentTimeMillis()
         if (now - lastBotClickTime > 4000) {
-            val getNumberNode = findNodeWithText(rootNode, listOf("+ GET NUMBER", "GET NUMBER", "+GET NUMBER"))
-            if (getNumberNode != null && (getNumberNode.isClickable || getNumberNode.parent?.isClickable == true)) {
-                val target = if (getNumberNode.isClickable) getNumberNode else getNumberNode.parent
+            val getNumberNode = findNodeWithText(rootNode, listOf("+ GET NUMBER", "GET NUMBER", "+GET NUMBER", "Rent Number", "New Number"))
+            if (getNumberNode != null) {
+                var target: android.view.accessibility.AccessibilityNodeInfo? = getNumberNode
+                var depth = 0
+                while (target != null && !target.isClickable && depth < 4) {
+                    target = target.parent
+                    depth++
+                }
                 val clicked = target?.performAction(android.view.accessibility.AccessibilityNodeInfo.ACTION_CLICK) ?: false
                 if (clicked) {
                     lastBotClickTime = now
@@ -79,13 +85,25 @@ class OrchestratorAccessibilityService : AccessibilityService() {
             }
         }
 
-        // Step B: Search for generated international phone number in inline buttons or messages
+        // Step B: Search for generated international phone number in inline buttons or messages (scanned bottom-up)
         val botPhone = findBotPhoneNumberInNode(rootNode)
         if (botPhone != null && botPhone != lastDetectedPhone) {
             lastDetectedPhone = botPhone
             Timber.i("AUTOMATICALLY CAPTURED PHONE NUMBER FROM @EHR_QUICKINCOME_BOT: $botPhone")
             onPhoneDetected?.invoke(botPhone)
             FloatingAssistantService.updatePhone(botPhone)
+
+            // Automatically switch back to AAA-X Orchestrator
+            FloatingAssistantService.bringOrchestratorToFront(this)
+        }
+
+        // Step C: Search for incoming OTP / verification code in Telegram messages (scanned bottom-up)
+        val botOtp = findOtpInNode(rootNode)
+        if (botOtp != null && botOtp != lastDetectedOtp) {
+            lastDetectedOtp = botOtp
+            Timber.i("AUTOMATICALLY CAPTURED OTP FROM @EHR_QUICKINCOME_BOT CHAT: $botOtp")
+            onOtpDetected?.invoke(botOtp)
+            FloatingAssistantService.updateOtp(botOtp)
 
             // Automatically switch back to AAA-X Orchestrator
             FloatingAssistantService.bringOrchestratorToFront(this)
@@ -104,7 +122,7 @@ class OrchestratorAccessibilityService : AccessibilityService() {
                 return node
             }
         }
-        for (i in 0 until node.childCount) {
+        for (i in node.childCount - 1 downTo 0) {
             val found = findNodeWithText(node.getChild(i), targets)
             if (found != null) return found
         }
@@ -113,6 +131,14 @@ class OrchestratorAccessibilityService : AccessibilityService() {
 
     private fun findBotPhoneNumberInNode(node: android.view.accessibility.AccessibilityNodeInfo?): String? {
         if (node == null) return null
+
+        // Scan children bottom-up first (newest Telegram messages are at the bottom of the chat)
+        for (i in node.childCount - 1 downTo 0) {
+            val child = node.getChild(i)
+            val found = findBotPhoneNumberInNode(child)
+            if (found != null) return found
+        }
+
         val text = node.text?.toString() ?: ""
         val phone = extractBotPhoneNumber(text)
         if (phone != null) return phone
@@ -121,16 +147,39 @@ class OrchestratorAccessibilityService : AccessibilityService() {
         val phoneFromDesc = extractBotPhoneNumber(desc)
         if (phoneFromDesc != null) return phoneFromDesc
 
-        for (i in 0 until node.childCount) {
+        return null
+    }
+
+    private fun findOtpInNode(node: android.view.accessibility.AccessibilityNodeInfo?): String? {
+        if (node == null) return null
+
+        // Scan children bottom-up first (newest Telegram messages are at the bottom of the chat)
+        for (i in node.childCount - 1 downTo 0) {
             val child = node.getChild(i)
-            val found = findBotPhoneNumberInNode(child)
+            val found = findOtpInNode(child)
             if (found != null) return found
         }
+
+        val text = node.text?.toString() ?: ""
+        val otp = SmsNotificationListener.extractOtp(text)
+        if (otp != null) return otp
+
+        val desc = node.contentDescription?.toString() ?: ""
+        val otpFromDesc = SmsNotificationListener.extractOtp(desc)
+        if (otpFromDesc != null) return otpFromDesc
+
         return null
     }
 
     private fun findPhoneNumberInNode(node: android.view.accessibility.AccessibilityNodeInfo?): String? {
         if (node == null) return null
+
+        for (i in node.childCount - 1 downTo 0) {
+            val child = node.getChild(i)
+            val found = findPhoneNumberInNode(child)
+            if (found != null) return found
+        }
+
         val text = node.text?.toString() ?: ""
         val phone = extractBotPhoneNumber(text)
         if (phone != null) return phone
@@ -139,11 +188,6 @@ class OrchestratorAccessibilityService : AccessibilityService() {
         val phoneFromDesc = extractBotPhoneNumber(desc)
         if (phoneFromDesc != null) return phoneFromDesc
 
-        for (i in 0 until node.childCount) {
-            val child = node.getChild(i)
-            val found = findPhoneNumberInNode(child)
-            if (found != null) return found
-        }
         return null
     }
 
@@ -214,6 +258,7 @@ class OrchestratorAccessibilityService : AccessibilityService() {
         val isAutomationRunning = AtomicBoolean(false)
         var onKillSwitchTriggered: (() -> Unit)? = null
         var onPhoneDetected: ((String) -> Unit)? = null
+        var onOtpDetected: ((String) -> Unit)? = null
 
         fun extractBotPhoneNumber(text: String): String? {
             if (text.isBlank()) return null

@@ -51,6 +51,7 @@ class OrchestratorEngine(
     val latestOtp: StateFlow<String?> = _latestOtp.asStateFlow()
 
     private val isHalted = AtomicBoolean(false)
+    private var lastCapturedAuthToken: String? = null
 
     val proxyCountry: StateFlow<String> = proxyEngine.currentCountry
 
@@ -195,9 +196,23 @@ class OrchestratorEngine(
                 try {
                     withContext(Dispatchers.Main) {
                         val cookies = CookieManager.getInstance().getCookie("https://x.com") ?: ""
-                        if (CookieParser.hasValidTwitterSession(cookies)) {
-                            Timber.i("Real Twitter authenticated session detected in CookieManager!")
+                        val authToken = CookieParser.extractAuthToken(cookies)
+                        if (CookieParser.hasValidTwitterSession(cookies) && !authToken.isNullOrBlank() && authToken != lastCapturedAuthToken) {
+                            lastCapturedAuthToken = authToken
+                            Timber.i("Real Twitter authenticated session detected in CookieManager: $authToken")
                             captureRealSession(cookies)
+
+                            // Clear cookies from live CookieManager so this account is not re-captured repeatedly
+                            val cm = CookieManager.getInstance()
+                            cm.removeAllCookies(null)
+                            cm.flush()
+
+                            // Check slot quota (max 6 accounts per real bot number)
+                            val slot = telephonyRepo.getActiveSlot()
+                            if (slot == null || slot.isExhausted) {
+                                Timber.w("Current Telegram Bot number has reached its 6-account capacity. Requesting new number...")
+                                requestNewPhoneNumberFromTelegramBot()
+                            }
                         }
                     }
                 } catch (e: CancellationException) {
@@ -325,5 +340,12 @@ class OrchestratorEngine(
         val newPass = PasswordSynthesizer.generatePassword()
         _activePassword.value = newPass
         return newPass
+    }
+
+    fun updateLatestOtp(newOtp: String) {
+        if (newOtp.isNotBlank()) {
+            _latestOtp.value = newOtp.trim()
+            Timber.i("Latest OTP updated in OrchestratorEngine: $newOtp")
+        }
     }
 }

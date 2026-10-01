@@ -106,6 +106,14 @@ class MainActivity : ComponentActivity() {
             }
         }
 
+        // Bind automatic OTP detection from Telegram chat screen
+        OrchestratorAccessibilityService.onOtpDetected = { otp ->
+            runOnUiThread {
+                engine.updateLatestOtp(otp)
+                Toast.makeText(this, "Auto-detected Bot OTP: $otp", Toast.LENGTH_SHORT).show()
+            }
+        }
+
         setContent {
             AAAXTheme {
                 val scope = rememberCoroutineScope()
@@ -210,5 +218,6 @@ class MainActivity : ComponentActivity() {
         super.onDestroy()
         OrchestratorAccessibilityService.onKillSwitchTriggered = null
         OrchestratorAccessibilityService.onPhoneDetected = null
+        OrchestratorAccessibilityService.onOtpDetected = null
     }
 }

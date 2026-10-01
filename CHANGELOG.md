@@ -2,6 +2,32 @@
 
 All notable changes and architectural configurations for this project are documented here.
 
+## [2.5.2] - 2026-10-01
+
+### Fixed & Automation Architecture Overhaul
+- **Session Capture Loop Deduplication ([`OrchestratorEngine.kt`](file:///root/project/AAAX/app/src/main/java/com/aaa/orchestrator/engine/OrchestratorEngine.kt), [`CookieParser.kt`](file:///root/project/AAAX/app/src/main/java/com/aaa/orchestrator/engine/CookieParser.kt))**:
+  - Added [`extractAuthToken(cookieString)`](file:///root/project/AAAX/app/src/main/java/com/aaa/orchestrator/engine/CookieParser.kt#L21) and `lastCapturedAuthToken` tracking to eliminate the duplicate account capture loop that repeatedly saved the same account every 3 seconds.
+  - Cookie manager now executes `removeAllCookies(null)` upon successful session capture, freeing the browser session cleanly for subsequent registrations.
+  - Added telephony quota exhaustion detection (`slot.isExhausted`) to prompt new number requests from `@EHR_QUICKINCOME_BOT`.
+
+- **Twitter / X DOM Automation Overhaul ([`TwitterAutoPilot.kt`](file:///root/project/AAAX/app/src/main/java/com/aaa/orchestrator/engine/TwitterAutoPilot.kt))**:
+  - Fixed Date of Birth dropdown selector collision: `#SELECTOR_1`, `#SELECTOR_2`, `#SELECTOR_3` are now strictly scoped to `<select>` tags with case-insensitive month name and numerical mapping.
+  - Removed premature synchronous `el.blur()` calls that aborted React 18 synthetic input batching before value commit.
+  - Added strict verification for `aria-disabled="true"` and `disabled` attributes on Next/Submit buttons to prevent premature navigation clicks.
+  - Added support for Step 3.5 Phone Confirmation modal targeting `[data-testid="confirmationSheetConfirm"]` and `['OK', 'Verify', 'Confirm']`.
+  - Added automatic progression when OTP (>= 6 digits) and Password (>= 8 chars) inputs are pre-filled.
+  - Implemented 15-second debounce on challenge notifications to eliminate toast flooding.
+
+- **Telegram On-Screen OTP & Bottom-Up Message Traversal ([`OrchestratorAccessibilityService.kt`](file:///root/project/AAAX/app/src/main/java/com/aaa/orchestrator/service/OrchestratorAccessibilityService.kt), [`MainActivity.kt`](file:///root/project/AAAX/app/src/main/java/com/aaa/orchestrator/MainActivity.kt))**:
+  - Replaced top-down node scanning with bottom-up child traversal (`node.childCount - 1 downTo 0`) in `findBotPhoneNumberInNode` and `findOtpInNode`, ensuring the latest Telegram message at the bottom of the chat is prioritized.
+  - Added clickable ancestor climbing (up to 4 levels) for inline bot keyboard buttons like `+ GET NUMBER`.
+  - Added `findOtpInNode` to extract incoming SMS OTP verification codes directly from the active Telegram chat screen even when push notifications are suppressed.
+  - Bound `onOtpDetected` in `MainActivity.kt` to update `OrchestratorEngine` and floating assistant HUD.
+
+- **Semantic Field Injection & State Reactive Triggers ([`BrowserScreen.kt`](file:///root/project/AAAX/app/src/main/java/com/aaa/orchestrator/ui/screens/BrowserScreen.kt))**:
+  - Added `LaunchedEffect(phoneNumber)` to automatically launch AutoPilot scans when a new verified bot phone arrives.
+  - Upgraded `injectValueIntoInput` with `fieldType` support (`"otp"`, `"phone"`, `"password"`), resetting React 18 `_valueTracker` for seamless DOM state synchronization.
+
 ## [2.5.1] - 2026-10-01
 
 ### Fixed & Multi-Tab Stability
