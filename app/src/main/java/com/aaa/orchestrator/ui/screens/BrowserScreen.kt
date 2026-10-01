@@ -1631,6 +1631,7 @@ fun BrowserScreen(
                         )
                     }
                 }
+            }
         }
     }
 
