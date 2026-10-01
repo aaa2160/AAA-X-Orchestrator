@@ -296,7 +296,7 @@ class OrchestratorEngine(
 
         // Prepare next slot and password for the next run
         val nextSlot = telephonyRepo.getActiveSlot()
-        _activePhoneNumber.value = nextSlot.phoneNumber
+        _activePhoneNumber.value = nextSlot?.phoneNumber ?: ""
         _activePassword.value = PasswordSynthesizer.generatePassword()
         _latestOtp.value = null
 
@@ -308,7 +308,8 @@ class OrchestratorEngine(
      */
     fun updateActivePhoneNumber(newPhone: String) {
         _activePhoneNumber.value = newPhone
-        telephonyRepo.setSlotPhoneNumber(telephonyRepo.getActiveSlot().slotIndex, newPhone)
+        val slotIndex = telephonyRepo.getActiveSlot()?.slotIndex ?: 1
+        telephonyRepo.setSlotPhoneNumber(slotIndex, newPhone)
         _metrics.value = _metrics.value.copy(currentSlotInfo = telephonyRepo.getSlotSummary())
         Timber.i("Active phone number manually set to: $newPhone")
     }
