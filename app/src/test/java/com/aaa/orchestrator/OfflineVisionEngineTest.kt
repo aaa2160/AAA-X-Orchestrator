@@ -9,7 +9,7 @@ class OfflineVisionEngineTest {
 
     @Test
     fun testExtractPolishPhoneNumberWithCountryCode() {
-        val ocrOutput = "Active 2nr Virtual SIM: +48 459 074 091 status ready"
+        val ocrOutput = "Active Cloud Virtual SIM: +48 459 074 091 status ready"
         val phone = OfflineVisionEngine.extractPolishPhoneNumber(ocrOutput)
         assertNotNull(phone)
         assertEquals("+48459074091", phone)

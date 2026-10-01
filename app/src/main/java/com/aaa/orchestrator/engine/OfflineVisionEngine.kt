@@ -11,7 +11,7 @@ import kotlin.coroutines.resume
 /**
  * On-device, offline Google ML Kit Text Recognition Vision Engine.
  * Operates completely offline on Samsung Galaxy A30 hardware without requiring cloud roundtrips.
- * Used for screen OCR, 2nr virtual number detection, and OTP captcha parsing.
+ * Used for screen OCR, virtual SIM number detection, and OTP captcha parsing.
  */
 object OfflineVisionEngine {
 

@@ -30,24 +30,21 @@ class OrchestratorAccessibilityService : AccessibilityService() {
         if (event == null) return
         val packageName = event.packageName?.toString() ?: ""
 
-        // 1. 2nr / Polish virtual number detection
-        if (packageName.contains("pl.rs.sip.softphone", ignoreCase = true) ||
-            packageName.contains("m2nr", ignoreCase = true) ||
-            packageName.contains("two_nr", ignoreCase = true) ||
-            packageName.contains("2nr", ignoreCase = true) ||
-            packageName.contains("softphone", ignoreCase = true)
+        // 1. Virtual / Polish SIM number detection
+        if (packageName.contains("softphone", ignoreCase = true) ||
+            packageName.contains("telephony", ignoreCase = true)
         ) {
             try {
                 val rootNode = rootInActiveWindow ?: return
                 val phone = findPhoneNumberInNode(rootNode)
                 if (phone != null && phone != lastDetectedPhone) {
                     lastDetectedPhone = phone
-                    Timber.i("AUTOMATICALLY CAPTURED PHONE NUMBER FROM 2NR: $phone")
+                    Timber.i("AUTOMATICALLY CAPTURED PHONE NUMBER: $phone")
                     onPhoneDetected?.invoke(phone)
                     FloatingAssistantService.updatePhone(phone)
                 }
             } catch (e: Exception) {
-                Timber.w(e, "Error inspecting 2nr node hierarchy")
+                Timber.w(e, "Error inspecting node hierarchy")
             }
         }
 

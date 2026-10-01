@@ -26,13 +26,13 @@ import timber.log.Timber
 
 /**
  * Macroify-style Floating Companion Overlay that stays on top of the screen
- * when interacting with external standalone applications like 2nr (Drugi Numer).
+ * when interacting with external apps like Telegram or Cloud SMS gateways.
  *
  * Features:
  * - Draggable anywhere on the screen
- * - Real-time display of auto-detected Polish phone number
+ * - Real-time display of auto-detected phone number
  * - 1-tap "Copy & Return to AAA-X"
- * - Live OTP banner when SMS verification code arrives from 2nr
+ * - Live OTP banner when SMS verification code arrives
  * - Eliminates tedious manual app switching and typing
  */
 class FloatingAssistantService : Service() {
@@ -98,7 +98,7 @@ class FloatingAssistantService : Service() {
         }
 
         val badgeView = TextView(this).apply {
-            text = if (currentPhone.startsWith("+48")) "2NR" else "TG BOT"
+            text = if (currentPhone.startsWith("+48")) "CLOUD SIM" else "TG BOT"
             textSize = 9f
             setTextColor(Color.WHITE)
             setPadding(dpToPx(5), dpToPx(2), dpToPx(5), dpToPx(2))
@@ -295,7 +295,7 @@ class FloatingAssistantService : Service() {
 
     private fun copyPhoneToClipboard() {
         val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-        val clip = ClipData.newPlainText("2nr Phone", currentPhone)
+        val clip = ClipData.newPlainText("Cloud Phone", currentPhone)
         clipboard.setPrimaryClip(clip)
         Toast.makeText(this, "Copied $currentPhone", Toast.LENGTH_SHORT).show()
     }
@@ -303,7 +303,7 @@ class FloatingAssistantService : Service() {
     private fun copyOtpToClipboard() {
         val otp = currentOtp ?: return
         val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-        val clip = ClipData.newPlainText("2nr OTP", otp)
+        val clip = ClipData.newPlainText("Cloud OTP", otp)
         clipboard.setPrimaryClip(clip)
         Toast.makeText(this, "Copied OTP $otp", Toast.LENGTH_SHORT).show()
     }
@@ -311,7 +311,7 @@ class FloatingAssistantService : Service() {
     private fun onPhoneChanged(phone: String) {
         phoneTextView?.post {
             phoneTextView?.text = phone
-            badgeTextView?.text = if (phone.startsWith("+48")) "2NR" else "TG BOT"
+            badgeTextView?.text = if (phone.startsWith("+48")) "CLOUD SIM" else "TG BOT"
         }
     }
 

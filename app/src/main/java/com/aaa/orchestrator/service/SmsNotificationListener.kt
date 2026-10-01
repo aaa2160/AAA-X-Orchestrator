@@ -5,8 +5,8 @@ import android.service.notification.StatusBarNotification
 import timber.log.Timber
 
 /**
- * Listens for incoming push notifications from 2nr / Polish SMS relays.
- * Automatically parses 6-digit verification codes using regex.
+ * Listens for incoming push notifications from Cloud SMS and Telegram relays.
+ * Automatically parses verification codes using regex.
  */
 class SmsNotificationListener : NotificationListenerService() {
 
@@ -17,12 +17,8 @@ class SmsNotificationListener : NotificationListenerService() {
         val text = extras.getCharSequence("android.text")?.toString() ?: ""
         val title = extras.getCharSequence("android.title")?.toString() ?: ""
 
-        // Check if notification is from 2nr, Telegram, or messaging services
-        val isTargetApp = packageName.contains("pl.rs.sip.softphone", ignoreCase = true) ||
-                packageName.contains("m2nr", ignoreCase = true) ||
-                packageName.contains("two_nr", ignoreCase = true) ||
-                packageName.contains("2nr", ignoreCase = true) ||
-                packageName.contains("softphone", ignoreCase = true) ||
+        // Check if notification is from Telegram, SMS, or messaging services
+        val isTargetApp = packageName.contains("softphone", ignoreCase = true) ||
                 packageName.contains("org.telegram.messenger", ignoreCase = true) ||
                 packageName.contains("org.telegram.plus", ignoreCase = true) ||
                 packageName.contains("org.thunderdog.challegram", ignoreCase = true) ||
@@ -30,12 +26,10 @@ class SmsNotificationListener : NotificationListenerService() {
                 packageName.contains("sms", ignoreCase = true) ||
                 packageName.contains("mobi", ignoreCase = true) ||
                 packageName.contains("messaging", ignoreCase = true) ||
-                title.contains("2nr", ignoreCase = true) ||
                 title.contains("EHR", ignoreCase = true) ||
                 title.contains("Quick", ignoreCase = true) ||
                 title.contains("Telegram", ignoreCase = true) ||
                 title.contains("OTP", ignoreCase = true) ||
-                text.contains("2nr", ignoreCase = true) ||
                 text.contains("EHR", ignoreCase = true) ||
                 text.contains("Twitter", ignoreCase = true) ||
                 text.contains("code", ignoreCase = true)

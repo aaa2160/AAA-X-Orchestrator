@@ -1,11 +1,11 @@
 package com.aaa.orchestrator.data.model
 
 /**
- * Models a single virtual Polish (+48) number slot in 2nr.
- * The video workflow establishes:
- * 1. 2nr holds up to 3 slots simultaneously.
+ * Models a single virtual Polish (+48) telephony slot.
+ * The workflow establishes:
+ * 1. Cloud SIM holds up to 3 slots simultaneously.
  * 2. Each slot creates up to 3 Twitter accounts before being deleted.
- * 3. A single Gmail session supports up to 5 total number reservations before requiring account reset.
+ * 3. A single session supports multiple reservations before rotation.
  */
 data class TelephonySlot(
     val slotIndex: Int, // 1, 2, or 3

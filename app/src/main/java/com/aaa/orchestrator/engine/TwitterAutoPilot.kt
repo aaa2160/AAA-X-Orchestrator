@@ -5,9 +5,10 @@ import android.webkit.WebView
 import timber.log.Timber
 
 /**
- * Robust DOM Automation Engine for Twitter/X account creation.
- * Executes intelligent selector matching, human-like typing simulation,
- * and security challenge detection (Face Verification / Arkose Captcha).
+ * Enterprise DOM Automation Engine for Twitter/X account creation.
+ * Executes resilient React 18 synthetic input injection, value-tracker bypassing,
+ * single-page application (SPA) dynamic step progression,
+ * and security challenge detection (KYC Selfie / Arkose Captcha).
  */
 class TwitterAutoPilot(
     private val onFaceVerificationDetected: () -> Unit,
@@ -73,9 +74,7 @@ class TwitterAutoPilot(
 
                 function simulateClick(el) {
                     if (!el) return false;
-                    try {
-                        el.focus();
-                    } catch(e) {}
+                    try { el.focus(); } catch(e) {}
                     try {
                         var rect = el.getBoundingClientRect();
                         var cx = rect.left + rect.width / 2;
@@ -87,9 +86,7 @@ class TwitterAutoPilot(
                         el.dispatchEvent(new MouseEvent('mouseup', opts));
                         el.dispatchEvent(new MouseEvent('click', opts));
                     } catch(e) {}
-                    try {
-                        el.click();
-                    } catch(e) {}
+                    try { el.click(); } catch(e) {}
                     return true;
                 }
 
@@ -97,6 +94,10 @@ class TwitterAutoPilot(
                     if (!el || !val) return false;
                     try {
                         el.focus();
+                        // Reset React 16/17/18 internal value tracker
+                        if (el._valueTracker) {
+                            el._valueTracker.setValue('');
+                        }
                         var proto = window.HTMLInputElement.prototype;
                         var descriptor = Object.getOwnPropertyDescriptor(proto, 'value');
                         if (descriptor && descriptor.set) {
@@ -109,8 +110,8 @@ class TwitterAutoPilot(
                         try {
                             el.dispatchEvent(new InputEvent('input', { bubbles: true, cancelable: true, inputType: 'insertText', data: val }));
                         } catch(ie) {}
-                        el.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true }));
-                        el.dispatchEvent(new KeyboardEvent('keyup', { bubbles: true }));
+                        el.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, key: 'Enter' }));
+                        el.dispatchEvent(new KeyboardEvent('keyup', { bubbles: true, key: 'Enter' }));
                         el.blur();
                         return true;
                     } catch(err) {
@@ -123,6 +124,23 @@ class TwitterAutoPilot(
                     try {
                         sel.focus();
                         var strVal = String(val);
+                        var intVal = parseInt(val, 10);
+
+                        // Select option by value or text index
+                        if (sel.options && sel.options.length > 0) {
+                            for (var i = 0; i < sel.options.length; i++) {
+                                var opt = sel.options[i];
+                                if (opt.value === strVal || parseInt(opt.value, 10) === intVal || opt.text.trim().toLowerCase() === strVal.toLowerCase()) {
+                                    sel.selectedIndex = i;
+                                    opt.selected = true;
+                                    break;
+                                }
+                            }
+                        }
+
+                        if (sel._valueTracker) {
+                            sel._valueTracker.setValue('');
+                        }
                         var descriptor = Object.getOwnPropertyDescriptor(window.HTMLSelectElement.prototype, 'value');
                         if (descriptor && descriptor.set) {
                             descriptor.set.call(sel, strVal);
@@ -139,7 +157,6 @@ class TwitterAutoPilot(
                 }
 
                 function clickButtonByText(candidates, exact) {
-                    // 1. Search buttons, links, div[role=button]
                     var targets = document.querySelectorAll('button, div[role="button"], a[role="button"], a');
                     for (var i = 0; i < targets.length; i++) {
                         var el = targets[i];
@@ -153,7 +170,6 @@ class TwitterAutoPilot(
                         }
                     }
 
-                    // 2. Search inner spans/divs directly and click closest clickable ancestor
                     var spans = document.querySelectorAll('span, div');
                     for (var i = 0; i < spans.length; i++) {
                         var el = spans[i];
@@ -182,7 +198,7 @@ class TwitterAutoPilot(
 
                 window._checkAutoPilot = function(force) {
                     var now = Date.now();
-                    if (!force && (now - lastActionTime < 1000)) return;
+                    if (!force && (now - lastActionTime < 800)) return;
                     if (force) {
                         lastActionTime = 0;
                         lastStep = '';
@@ -235,14 +251,17 @@ class TwitterAutoPilot(
                         ], false);
                         if (clickedLanding) {
                             if (window.AndroidBridge) window.AndroidBridge.reportStep('Clicked Continue with phone');
-                            lastActionTime = now + 1200;
+                            lastActionTime = now + 1000;
                             return;
                         }
                     }
 
                     // 4. Step 1: Switch to Phone if Twitter defaulted to Email
-                    var usePhoneBtn = clickButtonByText(['Use phone instead'], false);
-                    if (usePhoneBtn) {
+                    var emailInput = document.querySelector('input[type="email"], input[name="email"], input[autocomplete="email"]');
+                    var usePhoneBtn = document.querySelector('[data-testid="ocfSignupEmailPhoneToggle"]') ||
+                                      clickButtonByText(['Use phone instead', 'Use phone'], false);
+                    if (emailInput && usePhoneBtn) {
+                        if (typeof usePhoneBtn.click === 'function') simulateClick(usePhoneBtn);
                         if (window.AndroidBridge) window.AndroidBridge.reportStep('Switched to Phone input');
                         lastActionTime = now + 800;
                         return;
@@ -263,32 +282,35 @@ class TwitterAutoPilot(
                         lastActionTime = now + 300;
                     }
 
-                    // Fill DOB Selects
-                    var selects = document.querySelectorAll('select, div[data-testid*="select"], div[data-testid*="BirthDate"]');
+                    // Fill DOB Selects (#SELECTOR_1, #SELECTOR_2, #SELECTOR_3 or selects in BirthDate)
+                    var selects = document.querySelectorAll('select, div[data-testid*="select"], div[data-testid*="BirthDate"] select');
                     if (selects.length >= 3) {
                         var monthSel = selects[0];
                         var daySel = selects[1];
                         var yearSel = selects[2];
 
-                        if (!monthSel.value || monthSel.value === '0') {
+                        if (!monthSel.value || monthSel.value === '0' || monthSel.value === '') {
                             triggerSelect(monthSel, window._apConfig.birthMonth);
                         }
-                        if (!daySel.value || daySel.value === '0') {
+                        if (!daySel.value || daySel.value === '0' || daySel.value === '') {
                             triggerSelect(daySel, window._apConfig.birthDay);
                         }
-                        if (!yearSel.value || yearSel.value === '0') {
+                        if (!yearSel.value || yearSel.value === '0' || yearSel.value === '') {
                             triggerSelect(yearSel, window._apConfig.birthYear);
                         }
                     }
 
                     // Click Next on signup step once fields are populated
                     if (nameInput && phoneInput && nameInput.value && phoneInput.value && (force || lastStep !== 'signup_next')) {
-                        var nextClicked = clickNextButton();
-                        if (nextClicked) {
-                            lastStep = 'signup_next';
-                            lastActionTime = now + 1200;
-                            if (window.AndroidBridge) window.AndroidBridge.reportStep('Submitted Step 1');
-                            return;
+                        var nextBtn = document.querySelector('[data-testid="ocfSignupNextLink"], [data-testid="SignupButton"], [data-testid="nextButton"]');
+                        if (nextBtn && nextBtn.getAttribute('aria-disabled') !== 'true') {
+                            var nextClicked = clickNextButton();
+                            if (nextClicked) {
+                                lastStep = 'signup_next';
+                                lastActionTime = now + 1200;
+                                if (window.AndroidBridge) window.AndroidBridge.reportStep('Submitted Step 1');
+                                return;
+                            }
                         }
                     }
 
@@ -312,7 +334,6 @@ class TwitterAutoPilot(
                     }
 
                     // 7. Step 3.5: Phone Confirmation Dialog ("Verify phone")
-                    // Twitter shows popup: "We'll text your verification code to... Standard SMS fees may apply."
                     if (pageText.indexOf('Verify phone') !== -1 || pageText.indexOf('text your verification code') !== -1) {
                         var okClicked = clickButtonByText(['OK', 'Verify'], true);
                         if (okClicked) {
@@ -361,9 +382,9 @@ class TwitterAutoPilot(
                     }
                 }
 
-                // Run immediately and setup interval observer
+                // Run immediately and setup continuous interval & mutation observer
                 window._checkAutoPilot(true);
-                setInterval(function() { window._checkAutoPilot(false); }, 1000);
+                setInterval(function() { window._checkAutoPilot(false); }, 750);
 
                 var observer = new MutationObserver(function() {
                     window._checkAutoPilot(false);

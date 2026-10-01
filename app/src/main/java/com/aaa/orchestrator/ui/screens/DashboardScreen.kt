@@ -153,7 +153,7 @@ fun DashboardScreen(
                             fontWeight = FontWeight.Bold
                         )
                         Text(
-                            text = metrics.currentSlotInfo.replace("2nr", "Cloud"),
+                            text = metrics.currentSlotInfo,
                             style = MaterialTheme.typography.titleMedium.copy(fontSize = 14.sp),
                             color = TextSlateDark
                         )

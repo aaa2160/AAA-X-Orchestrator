@@ -17,7 +17,7 @@ class SmsNotificationListenerTest {
 
     @Test
     fun testHyphenatedPolishOtp() {
-        val message = "2nr: Twój kod weryfikacyjny to 512-394"
+        val message = "Cloud SMS: Twój kod weryfikacyjny to 512-394"
         val otp = SmsNotificationListener.extractOtp(message)
         assertNotNull(otp)
         assertEquals("512394", otp)

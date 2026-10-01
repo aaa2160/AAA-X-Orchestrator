@@ -76,7 +76,7 @@ class OrchestratorEngine(
             Timber.i("OrchestratorEngine received real SMS / Telegram OTP: $code")
         }
 
-        // Connect real Accessibility Service phone detection (2nr & @EHR_QUICKINCOME_BOT)
+        // Connect real Accessibility Service phone detection (Telegram & Cloud SMS)
         com.aaa.orchestrator.service.OrchestratorAccessibilityService.onPhoneDetected = { detectedPhone ->
             _activePhoneNumber.value = detectedPhone
             telephonyRepo.setSlotPhoneNumber(telephonyRepo.getActiveSlot().slotIndex, detectedPhone)
@@ -292,7 +292,7 @@ class OrchestratorEngine(
     }
 
     /**
-     * Allows the user to specify their real 2nr phone number.
+     * Allows the user to specify their real cloud / virtual phone number.
      */
     fun updateActivePhoneNumber(newPhone: String) {
         _activePhoneNumber.value = newPhone

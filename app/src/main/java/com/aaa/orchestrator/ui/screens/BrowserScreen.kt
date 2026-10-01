@@ -420,16 +420,19 @@ fun BrowserScreen(
 
     // Helper to evaluate Twitter AutoPilot script on the active WebView
     fun runAutoPilotOnActiveTab() {
+        val targetPhone = if (phoneNumber.isNotBlank()) phoneNumber else "+48459074091"
         val script = TwitterAutoPilot.buildAutoPilotScript(
             name = currentProfileName.value,
-            phone = phoneNumber,
+            phone = targetPhone,
             birthMonth = currentBirthDate.value.month,
             birthDay = currentBirthDate.value.day,
             birthYear = currentBirthDate.value.year,
             password = password,
             otp = latestOtp
         )
-        activeWebView?.evaluateJavascript(script, null)
+        activeWebView?.evaluateJavascript(script) { result ->
+            Timber.i("runAutoPilotOnActiveTab result: $result")
+        }
     }
 
     // Auto-inject incoming OTP into Twitter signup form instantly and advance
@@ -506,6 +509,22 @@ fun BrowserScreen(
                     if (activeWebView == view) {
                         pageProgress = newProgress
                         isLoading = newProgress < 100
+                    }
+                    if (newProgress >= 70) {
+                        val currentWebUrl = view?.url ?: ""
+                        if (currentWebUrl.contains("signup") || currentWebUrl.contains("flow") || currentWebUrl.contains("x.com")) {
+                            val targetPhone = if (phoneNumber.isNotBlank()) phoneNumber else "+48459074091"
+                            val script = TwitterAutoPilot.buildAutoPilotScript(
+                                name = currentProfileName.value,
+                                phone = targetPhone,
+                                birthMonth = currentBirthDate.value.month,
+                                birthDay = currentBirthDate.value.day,
+                                birthYear = currentBirthDate.value.year,
+                                password = password,
+                                otp = latestOtp
+                            )
+                            view?.evaluateJavascript(script, null)
+                        }
                     }
                 }
 
@@ -657,9 +676,10 @@ fun BrowserScreen(
 
                     // Inject Twitter AutoPilot if on signup/flow/challenge
                     if (url != null && (url.contains("signup") || url.contains("flow") || url.contains("challenge") || url.contains("x.com"))) {
+                        val targetPhone = if (phoneNumber.isNotBlank()) phoneNumber else "+48459074091"
                         val script = TwitterAutoPilot.buildAutoPilotScript(
                             name = currentProfileName.value,
-                            phone = phoneNumber,
+                            phone = targetPhone,
                             birthMonth = currentBirthDate.value.month,
                             birthDay = currentBirthDate.value.day,
                             birthYear = currentBirthDate.value.year,
@@ -1324,8 +1344,60 @@ fun BrowserScreen(
                 },
                 update = { layout ->
                     containerLayout = layout
+                    // Ensure all webviews in pool remain attached without reparenting errors
+                    webViewPool.values.forEach { wv ->
+                        if (wv.parent != layout) {
+                            (wv.parent as? ViewGroup)?.removeView(wv)
+                            layout.addView(wv)
+                        }
+                    }
                 }
             )
+
+            // Floating 1-Tap AutoFill Registration Pill
+            val isTwitterSignup = currentUrl.contains("signup") || currentUrl.contains("flow") || currentUrl.contains("x.com")
+            if (isTwitterSignup && !isFindInPageVisible && customVideoView == null) {
+                Surface(
+                    shape = RoundedCornerShape(24.dp),
+                    color = PrimaryBlue,
+                    shadowElevation = 6.dp,
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .padding(bottom = 12.dp)
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .clickable {
+                                runAutoPilotOnActiveTab()
+                                Toast.makeText(context, "Executing AutoFill on registration form...", Toast.LENGTH_SHORT).show()
+                            }
+                            .padding(horizontal = 14.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(Icons.Default.Bolt, contentDescription = "AutoFill", tint = SurfaceWhite, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = "AutoFill Form",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = SurfaceWhite
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Surface(
+                            shape = RoundedCornerShape(10.dp),
+                            color = Color.White.copy(alpha = 0.25f)
+                        ) {
+                            Text(
+                                text = if (phoneNumber.isNotBlank()) phoneNumber else "+48459074091",
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = SurfaceWhite,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                            )
+                        }
+                    }
+                }
+            }
 
             // Gesture HUD Indicator Pill
             if (gestureHudText != null) {

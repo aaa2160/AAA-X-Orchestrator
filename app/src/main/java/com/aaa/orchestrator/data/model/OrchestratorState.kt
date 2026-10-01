@@ -8,7 +8,7 @@ sealed class OrchestratorState(val label: String, val progress: Float) {
     object Idle : OrchestratorState("Idle - Ready", 0.0f)
     object PreflightCheck : OrchestratorState("Preflight Safety & Proxy Check", 0.12f)
     data class TargetDispatch(val url: String) : OrchestratorState("Stealth Browser Initialized", 0.25f)
-    data class TelephonyLoop(val slotNumber: Int, val phoneNumber: String) : OrchestratorState("Telephony (2nr #$slotNumber: $phoneNumber)", 0.40f)
+    data class TelephonyLoop(val slotNumber: Int, val phoneNumber: String) : OrchestratorState("Telephony (Cloud SIM #$slotNumber: $phoneNumber)", 0.40f)
     data class EmailVerification(val email: String) : OrchestratorState("Verifying Email ($email)", 0.55f)
     object Crypto2faSetup : OrchestratorState("In-Memory RFC 6238 2FA & Phone Unlink", 0.70f)
     object SessionExtraction : OrchestratorState("Extracting Cookies & Local Cache Reset", 0.85f)

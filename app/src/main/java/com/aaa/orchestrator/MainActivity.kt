@@ -77,11 +77,11 @@ class MainActivity : ComponentActivity() {
             }
         }
 
-        // Bind automatic 2nr phone number detection from active screen
+        // Bind automatic phone number detection from active screen
         OrchestratorAccessibilityService.onPhoneDetected = { phone ->
             runOnUiThread {
                 engine.updateActivePhoneNumber(phone)
-                Toast.makeText(this, "Auto-detected 2nr Phone: $phone", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, "Auto-detected Phone: $phone", Toast.LENGTH_SHORT).show()
             }
         }
 

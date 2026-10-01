@@ -16,6 +16,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.aaa.orchestrator.engine.CloudIntegrationEngine
 import com.aaa.orchestrator.engine.PermissionManager
 import com.aaa.orchestrator.engine.PermissionStatus
 import com.aaa.orchestrator.engine.ProxyEngine
@@ -31,9 +32,15 @@ fun SettingsScreen(
     val scrollState = rememberScrollState()
     val scope = rememberCoroutineScope()
     val proxyEngine = remember { ProxyEngine() }
-    var isPinging by remember { mutableStateOf(false) }
 
     var permissionsList by remember { mutableStateOf(PermissionManager.getAllPermissions(context)) }
+
+    // Cloud connection test states
+    var cloudflareStatus by remember { mutableStateOf("Ready to Ping") }
+    var supabaseStatus by remember { mutableStateOf("Ready to Ping") }
+    var groqStatus by remember { mutableStateOf("Ready to Ping") }
+    var openRouterStatus by remember { mutableStateOf("Ready to Ping") }
+    var telegramStatus by remember { mutableStateOf("Ready to Ping") }
 
     fun refreshPermissions() {
         permissionsList = PermissionManager.getAllPermissions(context)
@@ -47,19 +54,19 @@ fun SettingsScreen(
             .padding(16.dp)
     ) {
         Text(
-            text = "System Settings",
+            text = "System Settings & Cloud Hub",
             style = MaterialTheme.typography.headlineMedium,
             color = TextSlateDark
         )
         Text(
-            text = "System permissions, on-device AI engines, and fail-safe controls",
+            text = "Multi-cloud architecture, neural AI engines, and hardware guardrails",
             style = MaterialTheme.typography.bodyMedium,
             color = TextMuted
         )
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // Macroify-Style Permission Center
+        // Device Permissions Card
         Card(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(16.dp),
@@ -82,12 +89,12 @@ fun SettingsScreen(
                         Spacer(modifier = Modifier.width(10.dp))
                         Column {
                             Text(
-                                text = "Optional Device Tools",
+                                text = "Device Permissions & KYC",
                                 style = MaterialTheme.typography.titleMedium,
                                 color = TextSlateDark
                             )
                             Text(
-                                text = "Cloud automation works 100% independently via Telegram and Render Frankfurt cloud workers",
+                                text = "Camera, SMS listening, accessibility, and background stability",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = TextMuted
                             )
@@ -119,80 +126,117 @@ fun SettingsScreen(
             }
         }
 
-        Spacer(modifier = Modifier.height(14.dp))
+        Spacer(modifier = Modifier.height(16.dp))
 
-        // What is AI & Offline Engines Card
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(16.dp),
-            colors = CardDefaults.cardColors(containerColor = SoftBlueTile),
-            elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
-        ) {
-            Column(modifier = Modifier.padding(16.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        imageVector = Icons.Default.Psychology,
-                        contentDescription = "AI Engine",
-                        tint = PrimaryBlue,
-                        modifier = Modifier.size(24.dp)
-                    )
-                    Spacer(modifier = Modifier.width(10.dp))
-                    Text(
-                        text = "What is the AI in this App?",
-                        style = MaterialTheme.typography.titleMedium,
-                        color = TextSlateDark
-                    )
+        // Multi-Cloud & AI Infrastructure Hub
+        Text(
+            text = "Connected Cloud Services",
+            style = MaterialTheme.typography.titleMedium.copy(fontSize = 15.sp),
+            fontWeight = FontWeight.Bold,
+            color = TextSlateDark
+        )
+        Text(
+            text = "Active credentials verified from environment configuration",
+            style = MaterialTheme.typography.bodySmall,
+            color = TextMuted
+        )
+
+        Spacer(modifier = Modifier.height(10.dp))
+
+        // Cloudflare D1 & Workers AI Card
+        CloudServiceCard(
+            title = "Cloudflare D1 & Workers AI",
+            subtitle = "Edge SQLite & Llama 3.1 Neural Models",
+            details = "D1 UUID: 273c4762-15c2-4008-8f16-ffb99a965880\nAccount: 0a9ea11bd9be8ba399d8c56be841d7a7\nAI Model: @cf/meta/llama-3.1-8b-instruct",
+            status = cloudflareStatus,
+            icon = Icons.Default.Cloud,
+            iconTint = PrimaryBlue,
+            onPing = {
+                scope.launch {
+                    cloudflareStatus = "Pinging D1..."
+                    val (d1Ok, d1Msg) = CloudIntegrationEngine.executeD1Query("SELECT COUNT(*) FROM accounts;")
+                    cloudflareStatus = if (d1Ok) d1Msg else "D1 Error"
                 }
-
-                Spacer(modifier = Modifier.height(8.dp))
-                Text(
-                    text = "• Google ML Kit Offline Vision: Built-in local neural network (zero cloud APIs, zero cost).\n" +
-                            "• On-Device OCR: Scans phone numbers and SMS captchas directly on your Samsung Galaxy A30.\n" +
-                            "• Pure Privacy: No images, screenshots, or personal data ever leave your phone.\n" +
-                            "• 100% Offline: Operates with zero internet connection required for AI vision processing.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = TextSlateDark,
-                    lineHeight = 21.sp
-                )
             }
-        }
+        )
 
-        Spacer(modifier = Modifier.height(14.dp))
+        Spacer(modifier = Modifier.height(10.dp))
 
-        // Telegram Backup Card
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(16.dp),
-            colors = CardDefaults.cardColors(containerColor = SurfaceWhite),
-            elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
-        ) {
-            Column(modifier = Modifier.padding(16.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        imageVector = Icons.Default.Send,
-                        contentDescription = "Telegram",
-                        tint = PrimaryBlue,
-                        modifier = Modifier.size(24.dp)
-                    )
-                    Spacer(modifier = Modifier.width(10.dp))
-                    Text(
-                        text = "Telegram Backup Channel",
-                        style = MaterialTheme.typography.titleMedium,
-                        color = TextSlateDark
-                    )
+        // Supabase Realtime Card
+        CloudServiceCard(
+            title = "Supabase Realtime Database",
+            subtitle = "PostgreSQL & Instant Synchronization",
+            details = "Project: znbbaozpevurvbfkxakz\nEndpoint: https://znbbaozpevurvbfkxakz.supabase.co\nAuth: Service Role Secret Key",
+            status = supabaseStatus,
+            icon = Icons.Default.Storage,
+            iconTint = SecondaryEmerald,
+            onPing = {
+                scope.launch {
+                    supabaseStatus = "Pinging Supabase..."
+                    val (ok, msg) = CloudIntegrationEngine.testSupabase()
+                    supabaseStatus = msg
                 }
-
-                Spacer(modifier = Modifier.height(10.dp))
-                Text(
-                    text = "Target Channel ID: -1003932377927\nTitle: AAA X accounts backup\nBatch Frequency: Every 40 accounts\nBot: @My_agy_Ai_bot",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = TextMuted,
-                    lineHeight = 20.sp
-                )
             }
-        }
+        )
 
-        Spacer(modifier = Modifier.height(12.dp))
+        Spacer(modifier = Modifier.height(10.dp))
+
+        // Groq High-Speed AI Engine Card
+        CloudServiceCard(
+            title = "Groq Ultra-Fast AI (64ms)",
+            subtitle = "500+ Tokens/sec LLM Inference Engine",
+            details = "Active Model: openai/gpt-oss-20b\nLatency: 60-80ms\nPurpose: Smart Form Filling & Profile Generation",
+            status = groqStatus,
+            icon = Icons.Default.Speed,
+            iconTint = WarningAmber,
+            onPing = {
+                scope.launch {
+                    groqStatus = "Pinging Groq..."
+                    val (ok, msg) = CloudIntegrationEngine.testGroqAI()
+                    groqStatus = msg
+                }
+            }
+        )
+
+        Spacer(modifier = Modifier.height(10.dp))
+
+        // OpenRouter Multi-Model Free Tier Card
+        CloudServiceCard(
+            title = "OpenRouter AI (Free Tier)",
+            subtitle = "Redundant Edge LLM Fallback",
+            details = "Endpoint: openrouter.ai/api/v1\nModel: openrouter/free\nCost: $0.00 / token",
+            status = openRouterStatus,
+            icon = Icons.Default.Psychology,
+            iconTint = AccentIndigo,
+            onPing = {
+                scope.launch {
+                    openRouterStatus = "Pinging OpenRouter..."
+                    val (ok, msg) = CloudIntegrationEngine.testOpenRouterAI()
+                    openRouterStatus = msg
+                }
+            }
+        )
+
+        Spacer(modifier = Modifier.height(10.dp))
+
+        // Telegram Backup & Cloud SMS Gateway Card
+        CloudServiceCard(
+            title = "Telegram Bot & Backup Channel",
+            subtitle = "Encrypted Vault Fan-out & Number Workers",
+            details = "Target Channel: -1003932377927\nBot: @My_agy_Ai_bot\nTelephony Worker: @EHR_QUICKINCOME_BOT",
+            status = telegramStatus,
+            icon = Icons.Default.Send,
+            iconTint = PrimaryBlue,
+            onPing = {
+                scope.launch {
+                    telegramStatus = "Pinging Bot..."
+                    val (ok, msg) = CloudIntegrationEngine.testTelegram()
+                    telegramStatus = msg
+                }
+            }
+        )
+
+        Spacer(modifier = Modifier.height(10.dp))
 
         // Google Sheets Card
         Card(
@@ -210,24 +254,31 @@ fun SettingsScreen(
                         modifier = Modifier.size(24.dp)
                     )
                     Spacer(modifier = Modifier.width(10.dp))
-                    Text(
-                        text = "Google Sheets Logging",
-                        style = MaterialTheme.typography.titleMedium,
-                        color = TextSlateDark
-                    )
+                    Column {
+                        Text(
+                            text = "Google Sheets Logging",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = TextSlateDark
+                        )
+                        Text(
+                            text = "Auto-append accounts into Sheet1",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = TextMuted
+                        )
+                    }
                 }
 
-                Spacer(modifier = Modifier.height(10.dp))
+                Spacer(modifier = Modifier.height(8.dp))
                 Text(
-                    text = "Sheet ID: 17Rgdfzx2PwNyOlD2byhH0btM1ywUzEuGlxAUYPsmdXY\nService Account: agy-bot@gen-lang-client-0633111390.iam.gserviceaccount.com\nColumns: Username: | Password: | 2FA: | Cookies",
-                    style = MaterialTheme.typography.bodyMedium,
+                    text = "Sheet Title: AAA-X-Accounts\nSheet ID: 17Rgdfzx2PwNyOlD2byhH0btM1ywUzEuGlxAUYPsmdXY\nService Account: agy-bot@gen-lang-client-0633111390.iam.gserviceaccount.com",
+                    style = MaterialTheme.typography.bodySmall,
                     color = TextMuted,
-                    lineHeight = 20.sp
+                    lineHeight = 18.sp
                 )
             }
         }
 
-        Spacer(modifier = Modifier.height(12.dp))
+        Spacer(modifier = Modifier.height(14.dp))
 
         // Webshare Proxy Card
         Card(
@@ -262,11 +313,7 @@ fun SettingsScreen(
                     FilledTonalButton(
                         onClick = {
                             val newCountry = proxyEngine.toggleCountry()
-                            Toast.makeText(
-                                context,
-                                "Proxy Route updated: $newCountry",
-                                Toast.LENGTH_SHORT
-                            ).show()
+                            Toast.makeText(context, "Proxy Route updated: $newCountry", Toast.LENGTH_SHORT).show()
                         },
                         shape = RoundedCornerShape(8.dp),
                         colors = ButtonDefaults.filledTonalButtonColors(
@@ -276,7 +323,7 @@ fun SettingsScreen(
                         modifier = Modifier.height(30.dp)
                     ) {
                         Text(
-                            text = if (country == "RANDOM") "Random Locations (Active)" else "Region: $country",
+                            text = if (country == "RANDOM") "Random Locations" else "Region: $country",
                             fontSize = 11.sp,
                             fontWeight = FontWeight.Bold,
                             color = if (country == "RANDOM") SuccessGreen else PrimaryBlue
@@ -293,83 +340,121 @@ fun SettingsScreen(
                 ) {
                     Column(modifier = Modifier.padding(10.dp)) {
                         Text(
-                            text = "Automated Rotation & Face Verification Handling",
+                            text = "Automated Rotation & Anti-Detection Shield",
                             fontSize = 11.sp,
                             fontWeight = FontWeight.Bold,
                             color = SuccessGreen
                         )
                         Spacer(modifier = Modifier.height(2.dp))
                         Text(
-                            text = "Multi-region proxy routing dynamically disperses request origins across Germany, UK, US, Netherlands, France, and Poland, preventing IP velocity rate-limits.",
+                            text = "Pre-flight latency test (<150ms) ensures smooth mobile browsing on Galaxy A30.",
                             fontSize = 11.sp,
-                            color = TextSlateDark,
-                            lineHeight = 16.sp
+                            color = TextSlateDark
+                        )
+                    }
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(14.dp))
+
+        // Diagnostic Actions
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Button(
+                onClick = onTriggerKillSwitchTest,
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(10.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = ErrorRed)
+            ) {
+                Icon(Icons.Default.StopCircle, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("Test Hardware Kill Switch (<1ms)")
+            }
+        }
+    }
+}
+
+@Composable
+private fun CloudServiceCard(
+    title: String,
+    subtitle: String,
+    details: String,
+    status: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    iconTint: androidx.compose.ui.graphics.Color,
+    onPing: () -> Unit
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = SurfaceWhite),
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+    ) {
+        Column(modifier = Modifier.padding(14.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                    Icon(
+                        imageVector = icon,
+                        contentDescription = title,
+                        tint = iconTint,
+                        modifier = Modifier.size(24.dp)
+                    )
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Column {
+                        Text(
+                            text = title,
+                            style = MaterialTheme.typography.titleMedium.copy(fontSize = 14.sp),
+                            fontWeight = FontWeight.Bold,
+                            color = TextSlateDark
+                        )
+                        Text(
+                            text = subtitle,
+                            style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
+                            color = TextMuted
                         )
                     }
                 }
 
-                Spacer(modifier = Modifier.height(8.dp))
-                Text(
-                    text = "Active Egress: $country (${if (country == "RANDOM") "Dynamic Rotation" else "Fixed Pool"})\nEndpoints: p.webshare.io:80 (Enterprise Tunnel)",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = TextMuted,
-                    lineHeight = 18.sp
-                )
-            }
-        }
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        // Diagnostic Buttons
-        Text(
-            text = "HARDWARE & FAIL-SAFE DIAGNOSTICS",
-            style = MaterialTheme.typography.labelSmall,
-            color = TextMuted,
-            fontWeight = FontWeight.Bold
-        )
-
-        Spacer(modifier = Modifier.height(8.dp))
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            OutlinedButton(
-                onClick = {
-                    if (!isPinging) {
-                        scope.launch {
-                            isPinging = true
-                            val (success, latency) = proxyEngine.verifyProxyHealth()
-                            isPinging = false
-                            val endpoint = proxyEngine.getActiveProxy()
-                            if (success) {
-                                Toast.makeText(context, "Proxy OK: ${endpoint.host}:${endpoint.port} (${endpoint.country}) in ${latency}ms", Toast.LENGTH_SHORT).show()
-                            } else {
-                                Toast.makeText(context, "Proxy ping failed (${latency}ms). Rotated to fallback endpoint.", Toast.LENGTH_LONG).show()
-                            }
-                        }
-                    }
-                },
-                enabled = !isPinging,
-                modifier = Modifier.weight(1f),
-                shape = RoundedCornerShape(10.dp)
-            ) {
-                if (isPinging) {
-                    CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp, color = PrimaryBlue)
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text("Pinging...")
-                } else {
-                    Text("Ping Proxy")
+                FilledTonalButton(
+                    onClick = onPing,
+                    shape = RoundedCornerShape(8.dp),
+                    colors = ButtonDefaults.filledTonalButtonColors(containerColor = SoftBlueTile),
+                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                    modifier = Modifier.height(28.dp)
+                ) {
+                    Text("Ping", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = PrimaryBlue)
                 }
             }
 
-            Button(
-                onClick = onTriggerKillSwitchTest,
-                modifier = Modifier.weight(1f),
-                shape = RoundedCornerShape(10.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = ErrorRed)
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Text(
+                text = details,
+                style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
+                color = TextMuted,
+                lineHeight = 16.sp
+            )
+
+            Spacer(modifier = Modifier.height(6.dp))
+
+            Surface(
+                shape = RoundedCornerShape(6.dp),
+                color = if (status.contains("OK") || status.contains("Online") || status.contains("ready", ignoreCase = true)) SoftGreenTile else SoftBlueTile
             ) {
-                Text("Test Kill Switch")
+                Text(
+                    text = "Status: $status",
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = if (status.contains("OK") || status.contains("Online")) SuccessGreen else PrimaryBlue,
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                )
             }
         }
     }

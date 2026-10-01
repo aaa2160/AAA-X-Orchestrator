@@ -29,6 +29,9 @@ class CloudSyncRepository(
 
         Timber.i("Account buffered for sync: ${account.username} (Buffer size: ${batchBuffer.size})")
 
+        // Sync immediately to Cloudflare D1 Serverless Database
+        com.aaa.orchestrator.engine.CloudIntegrationEngine.syncAccountToCloudflare(account)
+
         // Sync immediately to Render Cloud Orchestrator backend
         dispatchRenderCloudSync(account)
 
@@ -41,7 +44,7 @@ class CloudSyncRepository(
             }
         }
 
-        return@withContext SyncStatus.SYNCED_SHEETS
+        return@withContext SyncStatus.FULLY_SYNCED
     }
 
     private fun dispatchRenderCloudSync(account: AccountRecord) {

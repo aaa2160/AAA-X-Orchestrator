@@ -76,8 +76,8 @@ object PermissionManager {
                 }
             ),
             PermissionStatus(
-                title = "2nr SMS Notification Listener",
-                description = "Intercepts incoming push notifications from 2nr to auto-capture OTP codes",
+                title = "Cloud SMS Notification Listener",
+                description = "Intercepts incoming push notifications and SMS to auto-capture OTP verification codes",
                 isGranted = isNotificationListenerEnabled(context),
                 onGrant = { ctx ->
                     try {
@@ -91,8 +91,24 @@ object PermissionManager {
                 }
             ),
             PermissionStatus(
+                title = "Camera (KYC / Face Verification)",
+                description = "Permits camera access for Twitter identity checks and KYC selfie verification",
+                isGranted = context.checkSelfPermission(android.Manifest.permission.CAMERA) == android.content.pm.PackageManager.PERMISSION_GRANTED,
+                onGrant = { ctx ->
+                    try {
+                        val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                            data = Uri.parse("package:${ctx.packageName}")
+                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        }
+                        ctx.startActivity(intent)
+                    } catch (e: Exception) {
+                        Timber.e(e, "Cannot open app permission settings")
+                    }
+                }
+            ),
+            PermissionStatus(
                 title = "Display Over Other Apps (Overlay)",
-                description = "Permits workflow HUD and floating status controls to draw over 2nr and other apps",
+                description = "Permits workflow HUD and floating status controls to draw over other apps",
                 isGranted = isOverlayGranted(context),
                 onGrant = { ctx ->
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {

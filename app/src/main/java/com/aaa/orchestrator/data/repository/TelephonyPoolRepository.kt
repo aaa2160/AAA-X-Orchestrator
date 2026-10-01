@@ -7,11 +7,11 @@ import kotlinx.coroutines.flow.asStateFlow
 import timber.log.Timber
 
 /**
- * Manages the 3-slot virtual Polish (+48) number pool and Gmail quota cycles in 2nr.
- * Directly implements the manual method uncovered from the YouTube workflow analysis:
+ * Manages the 3-slot virtual Polish (+48) number pool and quota cycles.
+ * Directly implements the workflow:
  * - 3 active number slots simultaneously
  * - 3 accounts created per number (via immediate 2FA + phone unlinking)
- * - 5 numbers total per Gmail session before automated account reset & re-registration.
+ * - Number pool auto-rotation on quota exhaustion.
  */
 class TelephonyPoolRepository {
 
@@ -52,7 +52,7 @@ class TelephonyPoolRepository {
             return nextAvailable
         }
 
-        // All slots exhausted: automatically trigger 2nr pool renewal
+        // All slots exhausted: automatically trigger pool renewal
         renewAllSlots()
         return _slots.value.first()
     }
@@ -67,7 +67,7 @@ class TelephonyPoolRepository {
         _slots.value = renewed
         activeSlotIndex = 1
         resetGmailSession()
-        Timber.i("All 3 telephony slots auto-renewed with new 2nr Polish number pool.")
+        Timber.i("All 3 telephony slots auto-renewed with new Polish number pool.")
     }
 
     /**
@@ -88,8 +88,8 @@ class TelephonyPoolRepository {
     }
 
     /**
-     * Replaces an exhausted slot with a freshly reserved 2nr number.
-     * Checks if the 5-number cap has been reached for the current Gmail session.
+     * Replaces an exhausted slot with a freshly reserved number.
+     * Checks if the 5-number cap has been reached for the current session.
      */
     fun replaceExhaustedSlot(slotIndex: Int, newPhoneNumber: String): Boolean {
         val currentList = _slots.value.toMutableList()
@@ -105,18 +105,18 @@ class TelephonyPoolRepository {
             _slots.value = currentList
             Timber.i("Slot #$slotIndex renewed with $newPhoneNumber. Session total: $totalNumbersInCurrentSession/5")
 
-            // Returns true if the Gmail session limit of 5 is reached
+            // Returns true if the session limit of 5 is reached
             return totalNumbersInCurrentSession >= TelephonySlot.MAX_NUMBERS_PER_GMAIL_SESSION
         }
         return false
     }
 
     /**
-     * Resets the Gmail session counter after 2nr account deletion & re-registration.
+     * Resets the session counter after account deletion & re-registration.
      */
     fun resetGmailSession() {
         totalNumbersInCurrentSession = 0
-        Timber.i("2nr Gmail session reset. Infinite quota cycle renewed.")
+        Timber.i("Telephony session reset. Infinite quota cycle renewed.")
     }
 
     fun getSlotSummary(): String {
