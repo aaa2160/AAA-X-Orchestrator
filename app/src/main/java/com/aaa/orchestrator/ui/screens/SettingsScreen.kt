@@ -16,6 +16,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.aaa.orchestrator.engine.PermissionManager
+import com.aaa.orchestrator.engine.PermissionStatus
 import com.aaa.orchestrator.engine.ProxyEngine
 import com.aaa.orchestrator.ui.theme.*
 import kotlinx.coroutines.launch
@@ -31,6 +33,12 @@ fun SettingsScreen(
     val proxyEngine = remember { ProxyEngine() }
     var isPinging by remember { mutableStateOf(false) }
 
+    var permissionsList by remember { mutableStateOf(PermissionManager.getAllPermissions(context)) }
+
+    fun refreshPermissions() {
+        permissionsList = PermissionManager.getAllPermissions(context)
+    }
+
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -44,12 +52,112 @@ fun SettingsScreen(
             color = TextSlateDark
         )
         Text(
-            text = "Cloud integrations and hardware fail-safe parameters",
+            text = "System permissions, on-device AI engines, and fail-safe controls",
             style = MaterialTheme.typography.bodyMedium,
             color = TextMuted
         )
 
         Spacer(modifier = Modifier.height(16.dp))
+
+        // Macroify-Style Permission Center
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(16.dp),
+            colors = CardDefaults.cardColors(containerColor = SurfaceWhite),
+            elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Default.Security,
+                            contentDescription = "Permissions",
+                            tint = PrimaryBlue,
+                            modifier = Modifier.size(24.dp)
+                        )
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Column {
+                            Text(
+                                text = "System Permissions (Macroify Setup)",
+                                style = MaterialTheme.typography.titleMedium,
+                                color = TextSlateDark
+                            )
+                            Text(
+                                text = "Required for 2nr OTP interception & background services",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = TextMuted
+                            )
+                        }
+                    }
+
+                    IconButton(
+                        onClick = {
+                            refreshPermissions()
+                            Toast.makeText(context, "Permissions refreshed", Toast.LENGTH_SHORT).show()
+                        },
+                        modifier = Modifier.size(28.dp)
+                    ) {
+                        Icon(Icons.Default.Refresh, contentDescription = "Refresh", tint = PrimaryBlue, modifier = Modifier.size(16.dp))
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                permissionsList.forEach { perm ->
+                    PermissionRow(
+                        permission = perm,
+                        onGrantClick = {
+                            perm.onGrant(context)
+                        }
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(14.dp))
+
+        // What is AI & Offline Engines Card
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(16.dp),
+            colors = CardDefaults.cardColors(containerColor = SoftBlueTile),
+            elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Default.Psychology,
+                        contentDescription = "AI Engine",
+                        tint = PrimaryBlue,
+                        modifier = Modifier.size(24.dp)
+                    )
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Text(
+                        text = "What is the AI in this App?",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = TextSlateDark
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = "• Google ML Kit Offline Vision: Built-in local neural network (zero cloud APIs, zero cost).\n" +
+                            "• On-Device OCR: Scans phone numbers and SMS captchas directly on your Samsung Galaxy A30.\n" +
+                            "• Pure Privacy: No images, screenshots, or personal data ever leave your phone.\n" +
+                            "• 100% Offline: Operates with zero internet connection required for AI vision processing.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = TextSlateDark,
+                    lineHeight = 21.sp
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(14.dp))
 
         // Telegram Backup Card
         Card(
@@ -206,6 +314,77 @@ fun SettingsScreen(
                 colors = ButtonDefaults.buttonColors(containerColor = ErrorRed)
             ) {
                 Text("Test Kill Switch")
+            }
+        }
+    }
+}
+
+@Composable
+private fun PermissionRow(
+    permission: PermissionStatus,
+    onGrantClick: () -> Unit
+) {
+    Surface(
+        shape = RoundedCornerShape(10.dp),
+        color = SurfaceVariantLight,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Row(
+            modifier = Modifier
+                .padding(horizontal = 12.dp, vertical = 8.dp)
+                .fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Surface(
+                        shape = RoundedCornerShape(4.dp),
+                        color = if (permission.isGranted) SoftGreenTile else SoftAmberTile
+                    ) {
+                        Text(
+                            text = if (permission.isGranted) "GRANTED" else "SETUP NEEDED",
+                            fontSize = 9.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = if (permission.isGranted) SuccessGreen else WarningAmber,
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = permission.title,
+                        style = MaterialTheme.typography.titleMedium.copy(fontSize = 13.sp),
+                        fontWeight = FontWeight.SemiBold,
+                        color = TextSlateDark
+                    )
+                }
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    text = permission.description,
+                    style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
+                    color = TextMuted
+                )
+            }
+
+            Spacer(modifier = Modifier.width(8.dp))
+
+            if (!permission.isGranted) {
+                FilledTonalButton(
+                    onClick = onGrantClick,
+                    shape = RoundedCornerShape(8.dp),
+                    colors = ButtonDefaults.filledTonalButtonColors(containerColor = PrimaryBlue),
+                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                    modifier = Modifier.height(30.dp)
+                ) {
+                    Text("Grant ↗", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = SurfaceWhite)
+                }
+            } else {
+                Icon(
+                    imageVector = Icons.Default.CheckCircle,
+                    contentDescription = "Active",
+                    tint = SuccessGreen,
+                    modifier = Modifier.size(20.dp)
+                )
             }
         }
     }

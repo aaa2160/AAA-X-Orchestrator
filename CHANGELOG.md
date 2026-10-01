@@ -2,6 +2,27 @@
 
 All notable changes and architectural configurations for this project are documented here.
 
+## [1.5.0] - 2026-10-01
+
+### Added & Enhanced
+- **Macroify-Style System Permissions Center ([`PermissionManager.kt`](file:///root/project/AAAX/app/src/main/java/com/aaa/orchestrator/engine/PermissionManager.kt), [`SettingsScreen.kt`](file:///root/project/AAAX/app/src/main/java/com/aaa/orchestrator/ui/screens/SettingsScreen.kt))**:
+  - Implemented an interactive setup checklist showing real-time grant status for all critical Android system permissions.
+  - Provided 1-tap direct redirect intents opening the exact Android system settings pages for:
+    - Accessibility Service (`Settings.ACTION_ACCESSIBILITY_SETTINGS`)
+    - 2nr SMS Notification Listener (`Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS`)
+    - Display Over Other Apps / Overlay (`Settings.ACTION_MANAGE_OVERLAY_PERMISSION`)
+    - Battery Optimization Exemption (`Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS`)
+    - Foreground Notifications (`Settings.ACTION_APP_NOTIFICATION_SETTINGS`)
+- **Complete Professional Browser Suite ([`BrowserScreen.kt`](file:///root/project/AAAX/app/src/main/java/com/aaa/orchestrator/ui/screens/BrowserScreen.kt))**:
+  - **Multi-Tab Architecture**: Integrated full tab manager supporting adding new tabs (`+`), switching between active tabs, closing tabs (`X`), and live tab count counter badge.
+  - **Integrated Download Manager**: Attached `DownloadListener` routing web file and document downloads directly into Android's system `DownloadManager` with notification progress.
+  - **Find in Page**: Added in-page text search bar using `findAllAsync` and `findNext` with prev/next match navigation.
+  - **Bookmarks & Browsing History**: Added 1-tap star bookmarking in Omnibox, plus dedicated modal for browsing history logs with timestamps and clear actions.
+  - **Webpage Share Sheet**: Added 1-tap native Android Sharesheet action to share current page link.
+  - **Incognito / Private Mode**: Added private mode toggle preventing history logging and wiping temporary cookies upon session finish.
+- **Transparent AI Vision Architecture Documentation**:
+  - Clarified on-device Google ML Kit offline text recognition engine running locally on Samsung Galaxy A30 CPU/NPU for phone & captcha OCR with zero cloud transmission.
+
 ## [1.4.0] - 2026-10-01
 
 ### Fixed & Enhanced

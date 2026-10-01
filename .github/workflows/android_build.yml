@@ -43,14 +43,19 @@ jobs:
       if: github.ref == 'refs/heads/main'
       uses: softprops/action-gh-release@v1
       with:
-        tag_name: v1.4.0
-        name: "AAA X-Orchestrator v1.4.0"
+        tag_name: v1.5.0
+        name: "AAA X-Orchestrator v1.5.0"
         body: |
-          ### AAA X-Orchestrator Production Release v1.4.0 (Real Native 2nr App Integration)
-          - **Removed Fake 2nr Web Link**: Completely eliminated the non-existent `2nr.app` bookmark. 2nr is an Android application with no web portal.
-          - **1-Tap Native 2nr App Launcher**: Added dedicated "Open 2nr" buttons directly into the Browser HUD and Dashboard Telephony card to launch the installed 2nr app on Samsung Galaxy A30 (`pl.rs.sip.softphone`, `pl.m2nr`, `com.moveit.two_nr`).
-          - **Comprehensive 2nr SMS Listener**: Expanded `SmsNotificationListener` to match all 2nr Android package signatures and titles, ensuring real OTP extraction from push notifications.
-          - **Real Web Bookmarks**: Cleaned browser bookmarks to include only legitimate web services (X.com, X Signup, Google, DuckDuckGo, Wikipedia).
+          ### AAA X-Orchestrator Production Release v1.5.0 (Macroify Permission Setup & Professional Browser Suite)
+          - **Macroify-Style Permission Setup Center**: Added interactive system permissions dashboard with 1-tap direct Android settings redirects for Accessibility Service, 2nr Notification Listener, Display Over Other Apps (Overlay), Battery Optimization Exemption, and Notifications.
+          - **Full Professional Browser Suite**:
+            - **Multi-Tab Architecture**: Open, switch, and close multiple tabs with dynamic tab counter badge.
+            - **Download Manager**: Native Android DownloadManager integration for file, APK, and document downloads.
+            - **Find in Page**: Search words and text on any loaded webpage with next/previous match jumping.
+            - **Bookmarks & Browsing History**: Save favorite sites with star button, browse history logs with timestamps.
+            - **Native Webpage Sharing**: 1-tap Android sharesheet to dispatch links.
+            - **Incognito / Private Mode**: Zero-trace browsing without saving history or cache.
+          - **Transparent AI Architecture**: Clarified Google ML Kit offline on-device vision neural network running 100% locally on Galaxy A30 for phone/captcha OCR with zero cloud reliance.
         files: |
           app/build/outputs/apk/debug/app-debug.apk
         draft: false

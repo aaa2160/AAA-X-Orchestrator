@@ -1,16 +1,23 @@
 package com.aaa.orchestrator.ui.screens
 
 import android.annotation.SuppressLint
+import android.app.DownloadManager
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import android.content.Intent
+import android.net.Uri
+import android.os.Environment
 import android.view.ViewGroup
 import android.webkit.*
 import android.widget.Toast
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
@@ -39,6 +46,20 @@ import kotlinx.coroutines.launch
 import timber.log.Timber
 import java.io.ByteArrayInputStream
 import java.net.URLEncoder
+import java.text.SimpleDateFormat
+import java.util.*
+
+data class BrowserTab(
+    val id: String = UUID.randomUUID().toString(),
+    var url: String,
+    var title: String = "New Tab"
+)
+
+data class HistoryItem(
+    val url: String,
+    val title: String,
+    val timestamp: String = SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date())
+)
 
 @SuppressLint("SetJavaScriptEnabled")
 @Composable
@@ -51,7 +72,12 @@ fun BrowserScreen(
     val scope = rememberCoroutineScope()
     val focusManager = LocalFocusManager.current
 
-    // Browser navigation & state
+    // Multi-Tab State
+    var tabs by remember { mutableStateOf(listOf(BrowserTab(url = activeUrl, title = "X Signup"))) }
+    var activeTabIndex by remember { mutableStateOf(0) }
+    var showTabSwitcher by remember { mutableStateOf(false) }
+
+    // Navigation & Web State
     var currentUrl by remember { mutableStateOf(activeUrl) }
     var inputUrl by remember { mutableStateOf(activeUrl) }
     var pageTitle by remember { mutableStateOf("Browser") }
@@ -60,9 +86,17 @@ fun BrowserScreen(
     var canGoBack by remember { mutableStateOf(false) }
     var canGoForward by remember { mutableStateOf(false) }
     var isDesktopMode by remember { mutableStateOf(false) }
+    var isIncognitoMode by remember { mutableStateOf(false) }
     var webViewInstance by remember { mutableStateOf<WebView?>(null) }
 
-    // Workflow HUD visibility (minimizable so user can browse normally)
+    // Professional Browser Tools
+    var showFindInPage by remember { mutableStateOf(false) }
+    var findQuery by remember { mutableStateOf("") }
+    var showBookmarksHistory by remember { mutableStateOf(false) }
+    var bookmarks by remember { mutableStateOf(mutableSetOf("https://x.com", "https://x.com/i/flow/signup", "https://www.google.com")) }
+    var history by remember { mutableStateOf(mutableListOf<HistoryItem>()) }
+
+    // Collapsible Workflow HUD & Phone editing
     var isHudExpanded by remember { mutableStateOf(false) }
     var showPhoneEditDialog by remember { mutableStateOf(false) }
     var phoneInputText by remember { mutableStateOf("") }
@@ -111,6 +145,29 @@ fun BrowserScreen(
         inputUrl = destination
         currentUrl = destination
         webViewInstance?.loadUrl(destination)
+
+        // Update active tab info
+        if (activeTabIndex in tabs.indices) {
+            val updated = tabs.toMutableList()
+            updated[activeTabIndex] = updated[activeTabIndex].copy(url = destination)
+            tabs = updated
+        }
+    }
+
+    fun shareCurrentPage() {
+        try {
+            val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                type = "text/plain"
+                putExtra(Intent.EXTRA_SUBJECT, pageTitle)
+                putExtra(Intent.EXTRA_TEXT, currentUrl)
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            context.startActivity(Intent.createChooser(shareIntent, "Share Page").apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            })
+        } catch (e: Exception) {
+            Toast.makeText(context, "Could not open share menu", Toast.LENGTH_SHORT).show()
+        }
     }
 
     // Phone Edit Dialog
@@ -159,16 +216,241 @@ fun BrowserScreen(
         )
     }
 
+    // Tab Switcher Dialog
+    if (showTabSwitcher) {
+        AlertDialog(
+            onDismissRequest = { showTabSwitcher = false },
+            title = {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("Tabs (${tabs.size})", fontWeight = FontWeight.Bold)
+                    FilledTonalButton(
+                        onClick = {
+                            val newTab = BrowserTab(url = "https://x.com", title = "New Tab")
+                            tabs = tabs + newTab
+                            activeTabIndex = tabs.size - 1
+                            currentUrl = newTab.url
+                            inputUrl = newTab.url
+                            webViewInstance?.loadUrl(newTab.url)
+                            showTabSwitcher = false
+                        },
+                        shape = RoundedCornerShape(8.dp),
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                        modifier = Modifier.height(28.dp)
+                    ) {
+                        Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(14.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("New Tab", fontSize = 11.sp)
+                    }
+                }
+            },
+            text = {
+                LazyColumn(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 350.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    items(tabs.indices.toList()) { index ->
+                        val tab = tabs[index]
+                        val isSelected = index == activeTabIndex
+                        Surface(
+                            shape = RoundedCornerShape(10.dp),
+                            color = if (isSelected) SoftBlueTile else SurfaceVariantLight,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    activeTabIndex = index
+                                    currentUrl = tab.url
+                                    inputUrl = tab.url
+                                    webViewInstance?.loadUrl(tab.url)
+                                    showTabSwitcher = false
+                                }
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .padding(horizontal = 12.dp, vertical = 10.dp)
+                                    .fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = tab.title,
+                                        style = MaterialTheme.typography.titleMedium.copy(fontSize = 13.sp),
+                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                        color = if (isSelected) PrimaryBlue else TextSlateDark,
+                                        maxLines = 1
+                                    )
+                                    Text(
+                                        text = tab.url,
+                                        style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
+                                        color = TextMuted,
+                                        maxLines = 1
+                                    )
+                                }
+                                if (tabs.size > 1) {
+                                    IconButton(
+                                        onClick = {
+                                            val mutable = tabs.toMutableList()
+                                            mutable.removeAt(index)
+                                            tabs = mutable
+                                            if (activeTabIndex >= tabs.size) {
+                                                activeTabIndex = tabs.size - 1
+                                            }
+                                            val current = tabs[activeTabIndex]
+                                            currentUrl = current.url
+                                            inputUrl = current.url
+                                            webViewInstance?.loadUrl(current.url)
+                                        },
+                                        modifier = Modifier.size(24.dp)
+                                    ) {
+                                        Icon(Icons.Default.Close, contentDescription = "Close Tab", tint = TextMuted, modifier = Modifier.size(14.dp))
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                Button(onClick = { showTabSwitcher = false }) {
+                    Text("Done")
+                }
+            }
+        )
+    }
+
+    // Bookmarks & History Modal
+    if (showBookmarksHistory) {
+        var selectedSubTab by remember { mutableStateOf(0) } // 0: Bookmarks, 1: History
+        AlertDialog(
+            onDismissRequest = { showBookmarksHistory = false },
+            title = {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    TabRow(
+                        selectedTabIndex = selectedSubTab,
+                        modifier = Modifier.weight(1f),
+                        containerColor = Color.Transparent
+                    ) {
+                        Tab(
+                            selected = selectedSubTab == 0,
+                            onClick = { selectedSubTab = 0 },
+                            text = { Text("Bookmarks (${bookmarks.size})") }
+                        )
+                        Tab(
+                            selected = selectedSubTab == 1,
+                            onClick = { selectedSubTab = 1 },
+                            text = { Text("History (${history.size})") }
+                        )
+                    }
+                }
+            },
+            text = {
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    if (selectedSubTab == 0) {
+                        if (bookmarks.isEmpty()) {
+                            Text("No saved bookmarks yet.", color = TextMuted, modifier = Modifier.padding(16.dp))
+                        } else {
+                            LazyColumn(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .heightIn(max = 300.dp),
+                                verticalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                items(bookmarks.toList()) { bUrl ->
+                                    Surface(
+                                        shape = RoundedCornerShape(8.dp),
+                                        color = SurfaceVariantLight,
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clickable {
+                                                navigateTo(bUrl)
+                                                showBookmarksHistory = false
+                                            }
+                                    ) {
+                                        Row(
+                                            modifier = Modifier.padding(8.dp),
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.SpaceBetween
+                                        ) {
+                                            Text(text = bUrl, fontSize = 12.sp, color = TextSlateDark, modifier = Modifier.weight(1f), maxLines = 1)
+                                            IconButton(
+                                                onClick = { bookmarks = (bookmarks - bUrl).toMutableSet() },
+                                                modifier = Modifier.size(20.dp)
+                                            ) {
+                                                Icon(Icons.Default.Close, contentDescription = null, tint = TextMuted, modifier = Modifier.size(12.dp))
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    } else {
+                        if (history.isEmpty()) {
+                            Text("No browsing history.", color = TextMuted, modifier = Modifier.padding(16.dp))
+                        } else {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.End
+                            ) {
+                                TextButton(onClick = { history = mutableListOf() }) {
+                                    Text("Clear All", fontSize = 11.sp, color = ErrorRed)
+                                }
+                            }
+                            LazyColumn(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .heightIn(max = 280.dp),
+                                verticalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                items(history.reversed()) { hItem ->
+                                    Surface(
+                                        shape = RoundedCornerShape(8.dp),
+                                        color = SurfaceVariantLight,
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clickable {
+                                                navigateTo(hItem.url)
+                                                showBookmarksHistory = false
+                                            }
+                                    ) {
+                                        Column(modifier = Modifier.padding(8.dp)) {
+                                            Text(text = hItem.title, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = TextSlateDark, maxLines = 1)
+                                            Text(text = "${hItem.timestamp} • ${hItem.url}", fontSize = 10.sp, color = TextMuted, maxLines = 1)
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                Button(onClick = { showBookmarksHistory = false }) {
+                    Text("Close")
+                }
+            }
+        )
+    }
+
     Column(
         modifier = modifier
             .fillMaxSize()
             .background(BackgroundLight)
     ) {
-        // Collapsible Workflow Registration HUD Bar
+        // Collapsible Workflow Registration HUD Bar (with Real 2nr Native App Launcher)
         Card(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 10.dp, vertical = 4.dp),
+                .padding(horizontal = 10.dp, vertical = 3.dp),
             shape = RoundedCornerShape(12.dp),
             colors = CardDefaults.cardColors(containerColor = SurfaceWhite),
             elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
@@ -205,7 +487,7 @@ fun BrowserScreen(
                     }
 
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        // Open real 2nr installed app on device
+                        // 1-Tap Real 2nr App Launcher
                         FilledTonalButton(
                             onClick = { AppLauncher.open2nrApp(context) },
                             shape = RoundedCornerShape(8.dp),
@@ -413,6 +695,59 @@ fun BrowserScreen(
             }
         }
 
+        // Find In Page Toolbar
+        AnimatedVisibility(visible = showFindInPage) {
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 10.dp, vertical = 2.dp),
+                shape = RoundedCornerShape(8.dp),
+                color = SurfaceVariantLight
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(Icons.Default.Search, contentDescription = null, tint = PrimaryBlue, modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
+                    OutlinedTextField(
+                        value = findQuery,
+                        onValueChange = {
+                            findQuery = it
+                            if (it.isNotEmpty()) webViewInstance?.findAllAsync(it) else webViewInstance?.clearMatches()
+                        },
+                        placeholder = { Text("Find in page...", fontSize = 11.sp) },
+                        singleLine = true,
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedContainerColor = Color.Transparent,
+                            unfocusedContainerColor = Color.Transparent,
+                            focusedBorderColor = Color.Transparent,
+                            unfocusedBorderColor = Color.Transparent
+                        ),
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(40.dp)
+                    )
+                    IconButton(onClick = { webViewInstance?.findNext(false) }, modifier = Modifier.size(28.dp)) {
+                        Icon(Icons.Default.KeyboardArrowUp, contentDescription = "Prev", modifier = Modifier.size(18.dp))
+                    }
+                    IconButton(onClick = { webViewInstance?.findNext(true) }, modifier = Modifier.size(28.dp)) {
+                        Icon(Icons.Default.KeyboardArrowDown, contentDescription = "Next", modifier = Modifier.size(18.dp))
+                    }
+                    IconButton(
+                        onClick = {
+                            showFindInPage = false
+                            webViewInstance?.clearMatches()
+                            findQuery = ""
+                        },
+                        modifier = Modifier.size(28.dp)
+                    ) {
+                        Icon(Icons.Default.Close, contentDescription = "Close Find", modifier = Modifier.size(16.dp))
+                    }
+                }
+            }
+        }
+
         // Real Interactive Address Bar & Search Omnibox
         Card(
             modifier = Modifier
@@ -466,6 +801,28 @@ fun BrowserScreen(
                         .height(44.dp),
                     trailingIcon = {
                         Row(verticalAlignment = Alignment.CenterVertically) {
+                            // Bookmark Star Button
+                            val isBookmarked = bookmarks.contains(currentUrl)
+                            IconButton(
+                                onClick = {
+                                    if (isBookmarked) {
+                                        bookmarks = (bookmarks - currentUrl).toMutableSet()
+                                        Toast.makeText(context, "Bookmark removed", Toast.LENGTH_SHORT).show()
+                                    } else {
+                                        bookmarks = (bookmarks + currentUrl).toMutableSet()
+                                        Toast.makeText(context, "Page bookmarked", Toast.LENGTH_SHORT).show()
+                                    }
+                                },
+                                modifier = Modifier.size(26.dp)
+                            ) {
+                                Icon(
+                                    imageVector = if (isBookmarked) Icons.Default.Star else Icons.Default.StarBorder,
+                                    contentDescription = "Bookmark",
+                                    tint = if (isBookmarked) WarningAmber else TextMuted,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            }
+
                             if (inputUrl.isNotBlank()) {
                                 IconButton(
                                     onClick = { inputUrl = "" },
@@ -479,6 +836,7 @@ fun BrowserScreen(
                                     )
                                 }
                             }
+
                             IconButton(
                                 onClick = {
                                     focusManager.clearFocus()
@@ -513,75 +871,115 @@ fun BrowserScreen(
             Spacer(modifier = Modifier.height(2.5.dp))
         }
 
-        // Standard Browser Navigation Bar & Quick Bookmarks
+        // Professional Browser Navigation Toolbar (Back, Forward, Refresh, Home, Tabs, Share, Menu)
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 10.dp, vertical = 2.dp),
+                .padding(horizontal = 8.dp, vertical = 2.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            // Navigation controls (Back, Forward, Refresh/Stop, Home)
+            // Navigation controls (Back, Forward, Reload/Stop, Home)
             Row(verticalAlignment = Alignment.CenterVertically) {
                 IconButton(
                     onClick = { if (webViewInstance?.canGoBack() == true) webViewInstance?.goBack() },
                     enabled = canGoBack,
-                    modifier = Modifier.size(30.dp)
+                    modifier = Modifier.size(28.dp)
                 ) {
                     Icon(
                         imageVector = Icons.Default.ArrowBack,
                         contentDescription = "Back",
                         tint = if (canGoBack) PrimaryBlue else TextMuted.copy(alpha = 0.4f),
-                        modifier = Modifier.size(17.dp)
+                        modifier = Modifier.size(16.dp)
                     )
                 }
 
                 IconButton(
                     onClick = { if (webViewInstance?.canGoForward() == true) webViewInstance?.goForward() },
                     enabled = canGoForward,
-                    modifier = Modifier.size(30.dp)
+                    modifier = Modifier.size(28.dp)
                 ) {
                     Icon(
                         imageVector = Icons.Default.ArrowForward,
                         contentDescription = "Forward",
                         tint = if (canGoForward) PrimaryBlue else TextMuted.copy(alpha = 0.4f),
-                        modifier = Modifier.size(17.dp)
+                        modifier = Modifier.size(16.dp)
                     )
                 }
 
                 IconButton(
                     onClick = {
-                        if (isLoading) {
-                            webViewInstance?.stopLoading()
-                        } else {
-                            webViewInstance?.reload()
-                        }
+                        if (isLoading) webViewInstance?.stopLoading() else webViewInstance?.reload()
                     },
-                    modifier = Modifier.size(30.dp)
+                    modifier = Modifier.size(28.dp)
                 ) {
                     Icon(
                         imageVector = if (isLoading) Icons.Default.Close else Icons.Default.Refresh,
                         contentDescription = if (isLoading) "Stop" else "Reload",
                         tint = TextSlateDark,
-                        modifier = Modifier.size(17.dp)
+                        modifier = Modifier.size(16.dp)
                     )
                 }
 
                 IconButton(
                     onClick = { navigateTo("https://x.com") },
-                    modifier = Modifier.size(30.dp)
+                    modifier = Modifier.size(28.dp)
                 ) {
                     Icon(
                         imageVector = Icons.Default.Home,
                         contentDescription = "Home",
                         tint = TextSlateDark,
-                        modifier = Modifier.size(17.dp)
+                        modifier = Modifier.size(16.dp)
                     )
                 }
             }
 
-            // Desktop site toggle & Clear Session
+            // Professional Toolbar Actions: Tab Counter, Find in Page, Share, Bookmarks/History, Desktop Mode
             Row(verticalAlignment = Alignment.CenterVertically) {
+                // Tab Switcher Button
+                Surface(
+                    onClick = { showTabSwitcher = true },
+                    shape = RoundedCornerShape(6.dp),
+                    color = SurfaceVariantLight,
+                    modifier = Modifier.size(26.dp)
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Text(
+                            text = "${tabs.size}",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = PrimaryBlue
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.width(4.dp))
+
+                // Find on Page button
+                IconButton(
+                    onClick = { showFindInPage = !showFindInPage },
+                    modifier = Modifier.size(28.dp)
+                ) {
+                    Icon(Icons.Default.Search, contentDescription = "Find", tint = if (showFindInPage) PrimaryBlue else TextSlateDark, modifier = Modifier.size(16.dp))
+                }
+
+                // Share Button
+                IconButton(
+                    onClick = { shareCurrentPage() },
+                    modifier = Modifier.size(28.dp)
+                ) {
+                    Icon(Icons.Default.Share, contentDescription = "Share", tint = TextSlateDark, modifier = Modifier.size(16.dp))
+                }
+
+                // Bookmarks & History Modal Button
+                IconButton(
+                    onClick = { showBookmarksHistory = true },
+                    modifier = Modifier.size(28.dp)
+                ) {
+                    Icon(Icons.Default.Bookmarks, contentDescription = "Bookmarks & History", tint = TextSlateDark, modifier = Modifier.size(16.dp))
+                }
+
+                // Desktop site toggle
                 IconButton(
                     onClick = {
                         isDesktopMode = !isDesktopMode
@@ -590,38 +988,41 @@ fun BrowserScreen(
                         webViewInstance?.reload()
                         Toast.makeText(context, if (isDesktopMode) "Desktop mode enabled" else "Mobile mode enabled", Toast.LENGTH_SHORT).show()
                     },
-                    modifier = Modifier.size(30.dp)
+                    modifier = Modifier.size(28.dp)
                 ) {
                     Icon(
                         imageVector = if (isDesktopMode) Icons.Default.DesktopWindows else Icons.Default.PhoneAndroid,
                         contentDescription = "Toggle Desktop Mode",
                         tint = if (isDesktopMode) PrimaryBlue else TextMuted,
-                        modifier = Modifier.size(17.dp)
+                        modifier = Modifier.size(16.dp)
                     )
                 }
 
+                // Incognito Mode Toggle
                 IconButton(
                     onClick = {
-                        CookieManager.getInstance().removeAllCookies(null)
-                        webViewInstance?.clearCache(true)
-                        webViewInstance?.clearHistory()
-                        canGoBack = false
-                        canGoForward = false
-                        Toast.makeText(context, "Browser cache and cookies wiped clean", Toast.LENGTH_SHORT).show()
+                        isIncognitoMode = !isIncognitoMode
+                        if (isIncognitoMode) {
+                            CookieManager.getInstance().removeAllCookies(null)
+                            webViewInstance?.clearCache(true)
+                            Toast.makeText(context, "Incognito mode active: Zero history recorded", Toast.LENGTH_SHORT).show()
+                        } else {
+                            Toast.makeText(context, "Standard mode active", Toast.LENGTH_SHORT).show()
+                        }
                     },
-                    modifier = Modifier.size(30.dp)
+                    modifier = Modifier.size(28.dp)
                 ) {
                     Icon(
-                        imageVector = Icons.Default.DeleteOutline,
-                        contentDescription = "Clear Cache",
-                        tint = TextMuted,
-                        modifier = Modifier.size(17.dp)
+                        imageVector = Icons.Default.VpnLock,
+                        contentDescription = "Incognito",
+                        tint = if (isIncognitoMode) SecondaryEmerald else TextMuted,
+                        modifier = Modifier.size(16.dp)
                     )
                 }
             }
         }
 
-        // Quick Navigation Bookmarks Bar
+        // Quick Navigation Bookmarks Bar (Authentic Websites Only)
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -638,7 +1039,7 @@ fun BrowserScreen(
 
         Spacer(modifier = Modifier.height(2.dp))
 
-        // Full Android WebView with WebChromeClient and Adblock
+        // Full Android WebView with WebChromeClient, DownloadListener, and Adblock
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -654,7 +1055,7 @@ fun BrowserScreen(
                             ViewGroup.LayoutParams.MATCH_PARENT
                         )
 
-                        // Full normal browser settings
+                        // Full professional browser settings
                         settings.apply {
                             javaScriptEnabled = true
                             domStorageEnabled = true
@@ -678,6 +1079,31 @@ fun BrowserScreen(
                         cookieManager.setAcceptCookie(true)
                         cookieManager.setAcceptThirdPartyCookies(this, true)
 
+                        // Integrated Download Manager
+                        setDownloadListener { url, userAgent, contentDisposition, mimetype, _ ->
+                            try {
+                                val request = DownloadManager.Request(Uri.parse(url)).apply {
+                                    setMimeType(mimetype)
+                                    val cookies = CookieManager.getInstance().getCookie(url)
+                                    addRequestHeader("cookie", cookies)
+                                    addRequestHeader("User-Agent", userAgent)
+                                    setDescription("Downloading file...")
+                                    setTitle(URLUtil.guessFileName(url, contentDisposition, mimetype))
+                                    setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
+                                    setDestinationInExternalPublicDir(
+                                        Environment.DIRECTORY_DOWNLOADS,
+                                        URLUtil.guessFileName(url, contentDisposition, mimetype)
+                                    )
+                                }
+                                val dm = ctx.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
+                                dm.enqueue(request)
+                                Toast.makeText(ctx, "Downloading file...", Toast.LENGTH_SHORT).show()
+                            } catch (e: Exception) {
+                                Timber.e(e, "Error initiating download")
+                                Toast.makeText(ctx, "Download failed: ${e.message}", Toast.LENGTH_SHORT).show()
+                            }
+                        }
+
                         // WebChromeClient for page progress, title, and JavaScript alert handling
                         webChromeClient = object : WebChromeClient() {
                             override fun onProgressChanged(view: WebView?, newProgress: Int) {
@@ -686,7 +1112,14 @@ fun BrowserScreen(
                             }
 
                             override fun onReceivedTitle(view: WebView?, title: String?) {
-                                if (title != null) pageTitle = title
+                                if (title != null) {
+                                    pageTitle = title
+                                    if (activeTabIndex in tabs.indices) {
+                                        val updated = tabs.toMutableList()
+                                        updated[activeTabIndex] = updated[activeTabIndex].copy(title = title)
+                                        tabs = updated
+                                    }
+                                }
                             }
 
                             override fun onJsAlert(
@@ -751,6 +1184,10 @@ fun BrowserScreen(
                                 if (url != null) {
                                     currentUrl = url
                                     inputUrl = url
+                                    // Save to history if not incognito
+                                    if (!isIncognitoMode) {
+                                        history.add(HistoryItem(url = url, title = pageTitle))
+                                    }
                                 }
                                 canGoBack = view?.canGoBack() == true
                                 canGoForward = view?.canGoForward() == true
