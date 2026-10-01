@@ -17,8 +17,19 @@ class SmsNotificationListener : NotificationListenerService() {
         val text = extras.getCharSequence("android.text")?.toString() ?: ""
         val title = extras.getCharSequence("android.title")?.toString() ?: ""
 
-        // Check if notification is from 2nr or messaging app
-        if (packageName.contains("nr") || packageName.contains("sms") || packageName.contains("mobi")) {
+        // Check if notification is from the real 2nr Android app or messaging services
+        val isTargetApp = packageName.contains("pl.rs.sip.softphone", ignoreCase = true) ||
+                packageName.contains("m2nr", ignoreCase = true) ||
+                packageName.contains("two_nr", ignoreCase = true) ||
+                packageName.contains("2nr", ignoreCase = true) ||
+                packageName.contains("softphone", ignoreCase = true) ||
+                packageName.contains("sms", ignoreCase = true) ||
+                packageName.contains("mobi", ignoreCase = true) ||
+                packageName.contains("messaging", ignoreCase = true) ||
+                title.contains("2nr", ignoreCase = true) ||
+                text.contains("2nr", ignoreCase = true)
+
+        if (isTargetApp) {
             Timber.i("Incoming notification from $packageName: $title - $text")
             val code = extractOtp(text) ?: extractOtp(title)
             if (code != null) {

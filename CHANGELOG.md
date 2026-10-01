@@ -2,6 +2,18 @@
 
 All notable changes and architectural configurations for this project are documented here.
 
+## [1.4.0] - 2026-10-01
+
+### Fixed & Enhanced
+- **Eliminated Fake 2nr Web Link**: Completely removed the non-existent `2nr.app` bookmark chip. 2nr (Drugi Numer) is an Android mobile app with no web portal.
+- **Native 2nr App Launcher Integration ([`AppLauncher.kt`](file:///root/project/AAAX/app/src/main/java/com/aaa/orchestrator/engine/AppLauncher.kt))**:
+  - Implemented automatic package resolution supporting all official 2nr Android package releases: `pl.rs.sip.softphone` (original 2nr), `pl.m2nr` (2nr v2), and `com.moveit.two_nr` (2nr Premium).
+  - Integrated 1-tap "Open 2nr" buttons into the [`BrowserScreen.kt`](file:///root/project/AAAX/app/src/main/java/com/aaa/orchestrator/ui/screens/BrowserScreen.kt) HUD and [`DashboardScreen.kt`](file:///root/project/AAAX/app/src/main/java/com/aaa/orchestrator/ui/screens/DashboardScreen.kt) Telephony buffer card to jump directly into the installed 2nr app.
+  - Added fallback opening the official 2nr Google Play Store listing (`market://details?id=pl.rs.sip.softphone`) if not yet installed.
+- **Expanded 2nr Push Notification Detection ([`SmsNotificationListener.kt`](file:///root/project/AAAX/app/src/main/java/com/aaa/orchestrator/service/SmsNotificationListener.kt))**:
+  - Broadened package matching to explicitly target `pl.rs.sip.softphone`, `pl.m2nr`, `two_nr`, `softphone`, and title/text "2nr" indicators to ensure zero missed OTP SMS notifications.
+- **Authentic Browser Bookmarks**: Replaced the placeholder chip with Wikipedia (`https://en.m.wikipedia.org`) alongside X.com, X Signup, Google, and DuckDuckGo.
+
 ## [1.3.0] - 2026-10-01
 
 ### Added & Enhanced

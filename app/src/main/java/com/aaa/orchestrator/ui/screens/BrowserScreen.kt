@@ -31,6 +31,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.aaa.orchestrator.data.model.OrchestratorState
+import com.aaa.orchestrator.engine.AppLauncher
 import com.aaa.orchestrator.engine.OrchestratorEngine
 import com.aaa.orchestrator.ui.theme.*
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -204,6 +205,26 @@ fun BrowserScreen(
                     }
 
                     Row(verticalAlignment = Alignment.CenterVertically) {
+                        // Open real 2nr installed app on device
+                        FilledTonalButton(
+                            onClick = { AppLauncher.open2nrApp(context) },
+                            shape = RoundedCornerShape(8.dp),
+                            colors = ButtonDefaults.filledTonalButtonColors(containerColor = SoftGreenTile),
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                            modifier = Modifier.height(30.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.PhoneAndroid,
+                                contentDescription = "Open 2nr App",
+                                tint = SuccessGreen,
+                                modifier = Modifier.size(13.dp)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Open 2nr", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = SuccessGreen)
+                        }
+
+                        Spacer(modifier = Modifier.width(4.dp))
+
                         // Capture session button always accessible
                         FilledTonalButton(
                             onClick = {
@@ -612,7 +633,7 @@ fun BrowserScreen(
             BookmarkChip("📝 X Signup") { navigateTo("https://x.com/i/flow/signup") }
             BookmarkChip("🔍 Google") { navigateTo("https://www.google.com") }
             BookmarkChip("🦆 DuckDuckGo") { navigateTo("https://duckduckgo.com") }
-            BookmarkChip("📞 2nr Web") { navigateTo("https://2nr.app") }
+            BookmarkChip("🌐 Wikipedia") { navigateTo("https://en.m.wikipedia.org") }
         }
 
         Spacer(modifier = Modifier.height(2.dp))

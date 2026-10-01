@@ -11,11 +11,13 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.aaa.orchestrator.data.model.DashboardMetrics
 import com.aaa.orchestrator.data.model.OrchestratorState
+import com.aaa.orchestrator.engine.AppLauncher
 import com.aaa.orchestrator.ui.components.KillSwitchHud
 import com.aaa.orchestrator.ui.components.MetricCard
 import com.aaa.orchestrator.ui.theme.*
@@ -28,6 +30,7 @@ fun DashboardScreen(
     onStopClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val context = LocalContext.current
     val scrollState = rememberScrollState()
 
     Column(
@@ -123,27 +126,43 @@ fun DashboardScreen(
                 modifier = Modifier
                     .padding(16.dp)
                     .fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                Icon(
-                    imageVector = Icons.Default.PhoneAndroid,
-                    contentDescription = "Telephony",
-                    tint = PrimaryBlue,
-                    modifier = Modifier.size(28.dp)
-                )
-                Spacer(modifier = Modifier.width(12.dp))
-                Column {
-                    Text(
-                        text = "2nr Telephony Buffer (Poland +48)",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = PrimaryBlue,
-                        fontWeight = FontWeight.Bold
+                Row(
+                    modifier = Modifier.weight(1f),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.PhoneAndroid,
+                        contentDescription = "Telephony",
+                        tint = PrimaryBlue,
+                        modifier = Modifier.size(28.dp)
                     )
-                    Text(
-                        text = metrics.currentSlotInfo,
-                        style = MaterialTheme.typography.titleMedium.copy(fontSize = 14.sp),
-                        color = TextSlateDark
-                    )
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Column {
+                        Text(
+                            text = "2nr Telephony Buffer (Poland +48)",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = PrimaryBlue,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            text = metrics.currentSlotInfo,
+                            style = MaterialTheme.typography.titleMedium.copy(fontSize = 14.sp),
+                            color = TextSlateDark
+                        )
+                    }
+                }
+
+                FilledTonalButton(
+                    onClick = { AppLauncher.open2nrApp(context) },
+                    shape = RoundedCornerShape(8.dp),
+                    colors = ButtonDefaults.filledTonalButtonColors(containerColor = SurfaceWhite),
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                    modifier = Modifier.height(32.dp)
+                ) {
+                    Text("Open 2nr", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = PrimaryBlue)
                 }
             }
         }
