@@ -63,6 +63,11 @@
             </intent-filter>
         </service>
 
+        <!-- Macroify-Style Floating Companion Overlay for 2nr and External Apps -->
+        <service
+            android:name=".service.FloatingAssistantService"
+            android:exported="false" />
+
     </application>
 
 </manifest>

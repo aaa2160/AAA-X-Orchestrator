@@ -28,10 +28,11 @@ class OrchestratorAccessibilityService : AccessibilityService() {
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         if (event == null) return
         val packageName = event.packageName?.toString() ?: ""
-        if (packageName.contains("pl.rs.sip.softphone") ||
-            packageName.contains("m2nr") ||
-            packageName.contains("two_nr") ||
-            packageName.contains("softphone")
+        if (packageName.contains("pl.rs.sip.softphone", ignoreCase = true) ||
+            packageName.contains("m2nr", ignoreCase = true) ||
+            packageName.contains("two_nr", ignoreCase = true) ||
+            packageName.contains("2nr", ignoreCase = true) ||
+            packageName.contains("softphone", ignoreCase = true)
         ) {
             try {
                 val rootNode = rootInActiveWindow ?: return
@@ -40,6 +41,7 @@ class OrchestratorAccessibilityService : AccessibilityService() {
                     lastDetectedPhone = phone
                     Timber.i("AUTOMATICALLY CAPTURED PHONE NUMBER FROM 2NR: $phone")
                     onPhoneDetected?.invoke(phone)
+                    FloatingAssistantService.updatePhone(phone)
                 }
             } catch (e: Exception) {
                 Timber.w(e, "Error inspecting 2nr node hierarchy")

@@ -155,14 +155,26 @@ fun DashboardScreen(
                     }
                 }
 
-                FilledTonalButton(
-                    onClick = { AppLauncher.open2nrApp(context) },
-                    shape = RoundedCornerShape(8.dp),
-                    colors = ButtonDefaults.filledTonalButtonColors(containerColor = SurfaceWhite),
-                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
-                    modifier = Modifier.height(32.dp)
-                ) {
-                    Text("Open 2nr", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = PrimaryBlue)
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    FilledTonalButton(
+                        onClick = { AppLauncher.open2nrApp(context, launchOverlay = true) },
+                        shape = RoundedCornerShape(8.dp),
+                        colors = ButtonDefaults.filledTonalButtonColors(containerColor = SurfaceWhite),
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                        modifier = Modifier.height(32.dp)
+                    ) {
+                        Text("Open 2nr", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = PrimaryBlue)
+                    }
+
+                    FilledTonalButton(
+                        onClick = { AppLauncher.open2nrInSplitScreen(context) },
+                        shape = RoundedCornerShape(8.dp),
+                        colors = ButtonDefaults.filledTonalButtonColors(containerColor = SoftBlueTile),
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                        modifier = Modifier.height(32.dp)
+                    ) {
+                        Text("Split", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = PrimaryBlue)
+                    }
                 }
             }
         }

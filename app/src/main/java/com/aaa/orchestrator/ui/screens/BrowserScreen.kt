@@ -111,6 +111,7 @@ fun BrowserScreen(
     val phoneNumber by (engine?.activePhoneNumber ?: remember { MutableStateFlow("+48459074091") }).collectAsState()
     val password by (engine?.activePassword ?: remember { MutableStateFlow("AAA_Auto_2026") }).collectAsState()
     val latestOtp by (engine?.latestOtp ?: remember { MutableStateFlow<String?>(null) }).collectAsState()
+    val proxyCountry by (engine?.proxyCountry ?: remember { MutableStateFlow("DE") }).collectAsState()
 
     val mobileUserAgent = "Mozilla/5.0 (Linux; Android 11; SM-A305F) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Mobile Safari/537.36"
     val desktopUserAgent = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36"
@@ -472,9 +473,9 @@ fun BrowserScreen(
                     }
 
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        // 1-Tap Real 2nr App Launcher
+                        // 1-Tap Real 2nr App Launcher with Floating Overlay
                         FilledTonalButton(
-                            onClick = { AppLauncher.open2nrApp(context) },
+                            onClick = { AppLauncher.open2nrApp(context, launchOverlay = true) },
                             shape = RoundedCornerShape(8.dp),
                             colors = ButtonDefaults.filledTonalButtonColors(containerColor = SoftGreenTile),
                             contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
@@ -488,6 +489,26 @@ fun BrowserScreen(
                             )
                             Spacer(modifier = Modifier.width(4.dp))
                             Text("Open 2nr", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = SuccessGreen)
+                        }
+
+                        Spacer(modifier = Modifier.width(4.dp))
+
+                        // 1-Tap Split-Screen Launcher for 2nr side-by-side
+                        FilledTonalButton(
+                            onClick = { AppLauncher.open2nrInSplitScreen(context) },
+                            shape = RoundedCornerShape(8.dp),
+                            colors = ButtonDefaults.filledTonalButtonColors(containerColor = SoftBlueTile),
+                            contentPadding = PaddingValues(horizontal = 6.dp, vertical = 4.dp),
+                            modifier = Modifier.height(30.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.VerticalSplit,
+                                contentDescription = "Split Screen 2nr",
+                                tint = PrimaryBlue,
+                                modifier = Modifier.size(13.dp)
+                            )
+                            Spacer(modifier = Modifier.width(3.dp))
+                            Text("Split", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = PrimaryBlue)
                         }
 
                         Spacer(modifier = Modifier.width(4.dp))
@@ -672,6 +693,74 @@ fun BrowserScreen(
                                     Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(12.dp))
                                     Spacer(modifier = Modifier.width(3.dp))
                                     Text("New Pass", fontSize = 10.sp)
+                                }
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(6.dp))
+
+                        // Proxy Route Row (Germany Face Verification Bypass & 6 OTPs per number)
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(
+                                text = "Proxy Route: ${if (proxyCountry == "DE") "🇩🇪 Germany (Bypass Mode)" else "🇵🇱 Poland"}",
+                                fontSize = 11.sp,
+                                color = TextMuted,
+                                fontWeight = FontWeight.Medium
+                            )
+                            TextButton(
+                                onClick = {
+                                    val next = engine?.toggleProxyCountry() ?: "DE"
+                                    Toast.makeText(
+                                        context,
+                                        if (next == "DE") "🇩🇪 Germany Route: Face Verification Bypass & 6 OTPs active" else "🇵🇱 Poland Route active",
+                                        Toast.LENGTH_SHORT
+                                    ).show()
+                                },
+                                contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp),
+                                modifier = Modifier.height(26.dp)
+                            ) {
+                                Icon(Icons.Default.VpnKey, contentDescription = null, modifier = Modifier.size(12.dp))
+                                Spacer(modifier = Modifier.width(3.dp))
+                                Text(if (proxyCountry == "DE") "Switch to PL" else "Switch to DE (6 OTPs)", fontSize = 10.sp)
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(4.dp))
+
+                        // 2nr Companion Assistant Row
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(
+                                text = "2nr Companion:",
+                                fontSize = 11.sp,
+                                color = TextMuted,
+                                fontWeight = FontWeight.Medium
+                            )
+                            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                TextButton(
+                                    onClick = { AppLauncher.open2nrApp(context, launchOverlay = true) },
+                                    contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp),
+                                    modifier = Modifier.height(26.dp)
+                                ) {
+                                    Icon(Icons.Default.PictureInPicture, contentDescription = null, modifier = Modifier.size(12.dp))
+                                    Spacer(modifier = Modifier.width(3.dp))
+                                    Text("Floating HUD", fontSize = 10.sp)
+                                }
+                                TextButton(
+                                    onClick = { AppLauncher.open2nrInSplitScreen(context) },
+                                    contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp),
+                                    modifier = Modifier.height(26.dp)
+                                ) {
+                                    Icon(Icons.Default.VerticalSplit, contentDescription = null, modifier = Modifier.size(12.dp))
+                                    Spacer(modifier = Modifier.width(3.dp))
+                                    Text("Split Screen", fontSize = 10.sp)
                                 }
                             }
                         }

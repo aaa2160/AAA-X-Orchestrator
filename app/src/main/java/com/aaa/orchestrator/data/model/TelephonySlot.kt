@@ -21,7 +21,7 @@ data class TelephonySlot(
         get() = (MAX_ACCOUNTS_PER_NUMBER - accountsCreated).coerceAtLeast(0)
 
     companion object {
-        const val MAX_ACCOUNTS_PER_NUMBER = 3
+        const val MAX_ACCOUNTS_PER_NUMBER = 6 // Up to 6 OTPs per Polish number via Germany VPN/Proxy method
         const val MAX_NUMBERS_PER_GMAIL_SESSION = 5
     }
 }

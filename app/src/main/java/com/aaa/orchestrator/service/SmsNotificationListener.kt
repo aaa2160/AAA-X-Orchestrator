@@ -35,6 +35,7 @@ class SmsNotificationListener : NotificationListenerService() {
             if (code != null) {
                 Timber.i("EXTRACTED SMS OTP CODE: $code")
                 onOtpReceived?.invoke(code)
+                FloatingAssistantService.updateOtp(code)
             }
         }
     }

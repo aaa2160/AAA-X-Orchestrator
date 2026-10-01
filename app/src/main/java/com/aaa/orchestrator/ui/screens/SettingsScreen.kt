@@ -237,27 +237,83 @@ fun SettingsScreen(
             elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
         ) {
             Column(modifier = Modifier.padding(16.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        imageVector = Icons.Default.VpnKey,
-                        contentDescription = "Proxy",
-                        tint = PrimaryBlue,
-                        modifier = Modifier.size(24.dp)
-                    )
-                    Spacer(modifier = Modifier.width(10.dp))
-                    Text(
-                        text = "Proxy Network (Webshare.io)",
-                        style = MaterialTheme.typography.titleMedium,
-                        color = TextSlateDark
-                    )
+                val country by proxyEngine.currentCountry.collectAsState()
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Default.VpnKey,
+                            contentDescription = "Proxy",
+                            tint = PrimaryBlue,
+                            modifier = Modifier.size(24.dp)
+                        )
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Text(
+                            text = "Proxy Routing",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = TextSlateDark
+                        )
+                    }
+
+                    FilledTonalButton(
+                        onClick = {
+                            val newCountry = proxyEngine.toggleCountry()
+                            Toast.makeText(
+                                context,
+                                if (newCountry == "DE") "🇩🇪 Germany Route: Face Verification Bypass & 6 OTPs active" else "🇵🇱 Poland Route: Carrier Match active",
+                                Toast.LENGTH_SHORT
+                            ).show()
+                        },
+                        shape = RoundedCornerShape(8.dp),
+                        colors = ButtonDefaults.filledTonalButtonColors(
+                            containerColor = if (country == "DE") SoftGreenTile else SoftBlueTile
+                        ),
+                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                        modifier = Modifier.height(30.dp)
+                    ) {
+                        Text(
+                            text = if (country == "DE") "🇩🇪 Germany (Recommended)" else "🇵🇱 Poland",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = if (country == "DE") SuccessGreen else PrimaryBlue
+                        )
+                    }
                 }
 
                 Spacer(modifier = Modifier.height(10.dp))
+
+                Surface(
+                    shape = RoundedCornerShape(8.dp),
+                    color = SoftGreenTile,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(modifier = Modifier.padding(10.dp)) {
+                        Text(
+                            text = "🔥 Twitter Method: Face Verification Solution",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = SuccessGreen
+                        )
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            text = "Routing traffic via Germany (🇩🇪) eliminates Twitter/X Face Verification challenges and allows receiving up to 6 OTPs per Polish 2nr phone number.",
+                            fontSize = 11.sp,
+                            color = TextSlateDark,
+                            lineHeight = 16.sp
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
                 Text(
-                    text = "Egress Country: Poland (PL) - Strict Match\nActive Tunnel: lebvkslv@p.webshare.io:80\nFallback: acdyvomx@p.webshare.io:80",
-                    style = MaterialTheme.typography.bodyMedium,
+                    text = "Active Egress: ${if (country == "DE") "Germany (DE) - Bypass Mode" else "Poland (PL) - Direct Carrier"}\nEndpoints: p.webshare.io:80 (lebvkslv / acdyvomx)",
+                    style = MaterialTheme.typography.bodySmall,
                     color = TextMuted,
-                    lineHeight = 20.sp
+                    lineHeight = 18.sp
                 )
             }
         }

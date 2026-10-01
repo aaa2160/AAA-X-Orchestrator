@@ -1,6 +1,9 @@
 package com.aaa.orchestrator.engine
 
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -11,7 +14,11 @@ import java.util.concurrent.TimeUnit
 
 /**
  * Manages proxy network routing and validates low-latency egress.
- * Ensures strict Poland country-matching to pair seamlessly with Polish (+48) numbers from 2nr.
+ *
+ * Supports:
+ * - 🇩🇪 Germany Route (DE): Bypasses Twitter/X Face Verification & Bot flags, enabling up to 6 OTPs per 2nr number
+ *   (Method verified via @EHR_QUICKSMS_BACKUP).
+ * - 🇵🇱 Poland Route (PL): Native carrier IP alignment for +48 Polish virtual numbers.
  */
 class ProxyEngine(
     private val client: OkHttpClient = OkHttpClient.Builder()
@@ -25,18 +32,43 @@ class ProxyEngine(
         val port: Int,
         val user: String,
         val pass: String,
-        val country: String = "PL"
+        val country: String = "DE"
     )
 
-    private val proxyPool = listOf(
+    private val germanyPool = listOf(
+        ProxyEndpoint("de.webshare.io", 80, "lebvkslv", "7zqkmd5k0rca", "DE"),
+        ProxyEndpoint("p.webshare.io", 80, "lebvkslv", "7zqkmd5k0rca", "DE"),
+        ProxyEndpoint("p.webshare.io", 80, "acdyvomx", "xquzdqsbaqne", "DE")
+    )
+
+    private val polandPool = listOf(
+        ProxyEndpoint("pl.webshare.io", 80, "lebvkslv", "7zqkmd5k0rca", "PL"),
         ProxyEndpoint("p.webshare.io", 80, "lebvkslv", "7zqkmd5k0rca", "PL"),
         ProxyEndpoint("p.webshare.io", 80, "acdyvomx", "xquzdqsbaqne", "PL")
     )
 
+    private val _currentCountry = MutableStateFlow("DE") // Default to Germany (Face Verification bypass)
+    val currentCountry: StateFlow<String> = _currentCountry.asStateFlow()
+
     private var currentProxyIndex = 0
 
+    fun setCountry(countryCode: String) {
+        if (countryCode == "DE" || countryCode == "PL") {
+            _currentCountry.value = countryCode
+            currentProxyIndex = 0
+            Timber.i("Proxy country routed to: $countryCode")
+        }
+    }
+
+    fun toggleCountry(): String {
+        val next = if (_currentCountry.value == "DE") "PL" else "DE"
+        setCountry(next)
+        return next
+    }
+
     fun getActiveProxy(): ProxyEndpoint {
-        return proxyPool[currentProxyIndex % proxyPool.size]
+        val pool = if (_currentCountry.value == "DE") germanyPool else polandPool
+        return pool[currentProxyIndex % pool.size]
     }
 
     suspend fun verifyProxyHealth(): Pair<Boolean, Long> = withContext(Dispatchers.IO) {
@@ -78,7 +110,8 @@ class ProxyEngine(
     }
 
     fun rotateProxy() {
-        currentProxyIndex = (currentProxyIndex + 1) % proxyPool.size
-        Timber.i("Rotated to proxy #${currentProxyIndex + 1}: ${getActiveProxy().host}")
+        val pool = if (_currentCountry.value == "DE") germanyPool else polandPool
+        currentProxyIndex = (currentProxyIndex + 1) % pool.size
+        Timber.i("Rotated to proxy #${currentProxyIndex + 1}: ${getActiveProxy().host} (${getActiveProxy().country})")
     }
 }

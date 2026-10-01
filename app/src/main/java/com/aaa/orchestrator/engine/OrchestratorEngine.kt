@@ -52,7 +52,10 @@ class OrchestratorEngine(
 
     private val isHalted = AtomicBoolean(false)
 
+    val proxyCountry: StateFlow<String> = proxyEngine.currentCountry
+
     init {
+        val initialProxy = proxyEngine.getActiveProxy()
         // Load persistent stats from database
         engineScope.launch {
             val total = accountRepository.getTotalAccountCount()
@@ -62,7 +65,8 @@ class OrchestratorEngine(
             _metrics.value = _metrics.value.copy(
                 totalCreated = total,
                 pendingSyncCount = pending,
-                currentSlotInfo = telephonyRepo.getSlotSummary()
+                currentSlotInfo = telephonyRepo.getSlotSummary(),
+                activeProxyIp = "${initialProxy.host}:${initialProxy.port} (${initialProxy.country})"
             )
         }
 
@@ -71,6 +75,15 @@ class OrchestratorEngine(
             _latestOtp.value = code
             Timber.i("OrchestratorEngine received real SMS OTP: $code")
         }
+    }
+
+    fun toggleProxyCountry(): String {
+        val next = proxyEngine.toggleCountry()
+        val proxy = proxyEngine.getActiveProxy()
+        _metrics.value = _metrics.value.copy(
+            activeProxyIp = "${proxy.host}:${proxy.port} (${proxy.country})"
+        )
+        return next
     }
 
     fun startAutomation() {
