@@ -90,6 +90,14 @@ class OrchestratorEngine(
             }
         }
 
+        // Connect real Accessibility Service on-screen OTP detection from Telegram chat
+        com.aaa.orchestrator.service.OrchestratorAccessibilityService.onOtpDetected = { detectedOtp ->
+            if (detectedOtp.isNotBlank()) {
+                updateLatestOtp(detectedOtp)
+                Timber.i("OrchestratorEngine received real Telegram on-screen OTP: $detectedOtp")
+            }
+        }
+
         // Poll Render Cloud for real phone number and inbound OTPs from Telegram worker
         engineScope.launch {
             while (isActive) {

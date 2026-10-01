@@ -128,13 +128,17 @@ fun buildGeoPrivacyScript(preset: GeoLocationPreset): String {
         preset
     }
 
+    val tz = java.util.TimeZone.getTimeZone(activePreset.timeZone)
+    val offsetMinutes = -(tz.getOffset(System.currentTimeMillis()) / (60 * 1000))
+
     return """
         (function() {
             try {
+                // 1. Spoof HTML5 Geolocation API
                 var fakeCoords = {
                     latitude: ${activePreset.latitude},
                     longitude: ${activePreset.longitude},
-                    accuracy: 20.0 + Math.random() * 15.0,
+                    accuracy: 15.0 + Math.random() * 10.0,
                     altitude: 35.0,
                     altitudeAccuracy: 5.0,
                     heading: null,
@@ -160,7 +164,7 @@ fun buildGeoPrivacyScript(preset: GeoLocationPreset): String {
                     Object.defineProperty(navigator, 'geolocation', {
                         get: function() { return fakeGeo; },
                         set: function() {},
-                        configurable: false
+                        configurable: true
                     });
                 } catch(e) {
                     try {
@@ -169,12 +173,31 @@ fun buildGeoPrivacyScript(preset: GeoLocationPreset): String {
                     } catch(e2) {}
                 }
 
+                // 2. Spoof Permissions API for Geolocation
+                if (navigator.permissions && navigator.permissions.query) {
+                    var origQuery = navigator.permissions.query.bind(navigator.permissions);
+                    navigator.permissions.query = function(desc) {
+                        if (desc && desc.name === 'geolocation') {
+                            return Promise.resolve({ state: 'granted', onchange: null });
+                        }
+                        return origQuery(desc);
+                    };
+                }
+
+                // 3. Spoof Timezone and Locale APIs
                 try {
                     var origResolved = Intl.DateTimeFormat.prototype.resolvedOptions;
                     Intl.DateTimeFormat.prototype.resolvedOptions = function() {
                         var res = origResolved.call(this);
                         res.timeZone = '${activePreset.timeZone}';
+                        res.locale = 'en-US';
                         return res;
+                    };
+                } catch(e) {}
+
+                try {
+                    Date.prototype.getTimezoneOffset = function() {
+                        return $offsetMinutes;
                     };
                 } catch(e) {}
 
@@ -189,28 +212,43 @@ fun buildGeoPrivacyScript(preset: GeoLocationPreset): String {
                     });
                 } catch(e) {}
 
-                if (navigator.permissions && navigator.permissions.query) {
-                    var origQuery = navigator.permissions.query.bind(navigator.permissions);
-                    navigator.permissions.query = function(desc) {
-                        if (desc && desc.name === 'geolocation') {
-                            return Promise.resolve({ state: 'granted', onchange: null });
-                        }
-                        return origQuery(desc);
-                    };
-                }
+                // 4. Strip WebRTC STUN/TURN Candidate Gathering to Prevent Public IP Leak
+                try {
+                    if (window.RTCPeerConnection) {
+                        var origRTCPeerConnection = window.RTCPeerConnection;
+                        window.RTCPeerConnection = function(config, constraints) {
+                            if (config && config.iceServers) {
+                                config.iceServers = [];
+                            }
+                            return new origRTCPeerConnection(config, constraints);
+                        };
+                        window.RTCPeerConnection.prototype = origRTCPeerConnection.prototype;
+                    }
+                } catch(e) {}
 
-                function maskGoogleIp() {
-                    var footers = document.querySelectorAll('#swml, #footcnt, div.fbar, div[data-sokoban-container] div.fbar');
-                    for (var i = 0; i < footers.length; i++) {
-                        var el = footers[i];
-                        if (el.innerText && (el.innerText.indexOf('IP') !== -1 || el.innerText.indexOf('location') !== -1 || el.innerText.indexOf('From') !== -1 || el.innerText.indexOf('Update') !== -1)) {
-                            el.innerHTML = '<div style="padding:10px;font-size:11px;color:#10B981;text-align:center;font-weight:600;background:rgba(16,185,129,0.08);border-radius:8px;margin:8px 0;">🛡️ Antigravity Privacy Shield: Virtual Location Active: ${activePreset.city}, ${activePreset.country} (Real IP & GPS Concealed)</div>';
+                // 5. Active DOM Masking for Search Engine IP and Location Footers
+                function maskSearchFooters() {
+                    var selectors = [
+                        '#footcnt', '#fbar', '.fbar', '#swml', '#swml-loc',
+                        'div[role="contentinfo"]', '.b2hzbe', '.W8L43c', '.K2Pfre',
+                        'span.Q8LRLc', 'div.b0KoTc', '.u7387', 'div[data-sokoban-container] div.fbar'
+                    ];
+                    var elements = document.querySelectorAll(selectors.join(','));
+                    for (var i = 0; i < elements.length; i++) {
+                        var el = elements[i];
+                        if (el && !el.getAttribute('data-shielded')) {
+                            var text = el.innerText || '';
+                            if (text.indexOf('IP') !== -1 || text.indexOf('location') !== -1 || text.indexOf('From') !== -1 || text.indexOf('Update') !== -1 || text.indexOf('precise') !== -1) {
+                                el.setAttribute('data-shielded', 'true');
+                                el.innerHTML = '<div style="padding:10px 14px;font-size:12px;color:#10B981;text-align:center;font-weight:600;background:rgba(16,185,129,0.09);border:1px solid rgba(16,185,129,0.25);border-radius:10px;margin:8px auto;max-width:600px;">🛡️ Antigravity Privacy Shield: Virtual Location Active: ${activePreset.city}, ${activePreset.country} (${activePreset.timeZone}) • Real IP & GPS Concealed</div>';
+                            }
                         }
                     }
                 }
-                if (window.location.hostname.indexOf('google.') !== -1) {
-                    maskGoogleIp();
-                    setInterval(maskGoogleIp, 1500);
+
+                if (window.location.hostname.indexOf('google.') !== -1 || window.location.hostname.indexOf('bing.') !== -1) {
+                    maskSearchFooters();
+                    setInterval(maskSearchFooters, 1000);
                 }
             } catch(err) {}
         })();
@@ -781,6 +819,8 @@ fun BrowserScreen(
     BackHandler(enabled = customVideoView != null || isFindInPageVisible || canGoBack) {
         when {
             customVideoView != null -> {
+                (context as? Activity)?.requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+                (context as? Activity)?.window?.decorView?.systemUiVisibility = View.SYSTEM_UI_FLAG_VISIBLE
                 customViewCallback?.onCustomViewHidden()
                 customVideoView = null
                 customViewCallback = null
@@ -852,7 +892,7 @@ fun BrowserScreen(
     }
 
     // Dynamic Geolocation Privacy Spoof Script (Active Gateway)
-    val geoPrivacyScript get() = buildGeoPrivacyScript(selectedLocationPreset)
+    fun getGeoPrivacyScript(): String = buildGeoPrivacyScript(selectedLocationPreset)
 
     // Auto-pilot bridge and notification dispatcher
     val autoPilot = remember {
@@ -942,7 +982,7 @@ fun BrowserScreen(
                 cacheMode = WebSettings.LOAD_DEFAULT
                 mixedContentMode = WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE
                 userAgentString = if (isDesktopMode) desktopUserAgent else mobileUserAgent
-                setGeolocationEnabled(false)
+                setGeolocationEnabled(true)
             }
 
             visibility = View.INVISIBLE
@@ -994,7 +1034,7 @@ fun BrowserScreen(
 
                     // Early and recurring location privacy injection across DOM render cycles
                     if (newProgress in listOf(5, 15, 30, 60, 95, 100)) {
-                        view?.evaluateJavascript(geoPrivacyScript, null)
+                        view?.evaluateJavascript(getGeoPrivacyScript(), null)
                     }
 
                     if (isAutomationMode && newProgress >= 70) {
@@ -1107,12 +1147,25 @@ fun BrowserScreen(
                 override fun onShowCustomView(view: View?, callback: CustomViewCallback?) {
                     customVideoView = view
                     customViewCallback = callback
+                    // Enable immersive sticky fullscreen
+                    (ctx as? Activity)?.let { act ->
+                        act.window.decorView.systemUiVisibility = (
+                            View.SYSTEM_UI_FLAG_FULLSCREEN
+                                or View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
+                                or View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
+                        )
+                    }
                 }
 
                 override fun onHideCustomView() {
                     customViewCallback?.onCustomViewHidden()
                     customVideoView = null
                     customViewCallback = null
+                    // Restore system UI and sensor orientation
+                    (ctx as? Activity)?.let { act ->
+                        act.window.decorView.systemUiVisibility = View.SYSTEM_UI_FLAG_VISIBLE
+                        act.requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+                    }
                 }
             }
 
@@ -1124,6 +1177,44 @@ fun BrowserScreen(
 
             // Client with Titanium AdBlock and AutoPilot injection
             webViewClient = object : WebViewClient() {
+                override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
+                    val uri = request?.url ?: return false
+                    val urlStr = uri.toString()
+                    val scheme = uri.scheme?.lowercase() ?: ""
+
+                    // External intent handling (tel:, mailto:, intent:)
+                    if (scheme != "http" && scheme != "https") {
+                        try {
+                            val intent = Intent.parseUri(urlStr, Intent.URI_INTENT_SCHEME)
+                            ctx.startActivity(intent)
+                            return true
+                        } catch (e: Exception) {
+                            return true
+                        }
+                    }
+
+                    // Enforce Virtual Location Routing on Google Queries
+                    val host = uri.host?.lowercase() ?: ""
+                    if (host.contains("google.") && !urlStr.contains("accounts.google") && !urlStr.contains("signin") && !urlStr.contains("auth")) {
+                        val cc = selectedLocationPreset.countryCode.ifBlank { "us" }
+                        val needsGl = !urlStr.contains("gl=")
+                        val needsHl = !urlStr.contains("hl=")
+                        if (needsGl || needsHl) {
+                            val sep = if (urlStr.contains("?")) "&" else "?"
+                            val extra = buildString {
+                                if (needsGl) append("gl=$cc")
+                                if (needsHl) {
+                                    if (isNotEmpty()) append("&")
+                                    append("hl=en")
+                                }
+                                append("&pws=0")
+                            }
+                            view?.loadUrl("$urlStr$sep$extra")
+                            return true
+                        }
+                    }
+                    return false
+                }
                 override fun onReceivedError(view: WebView?, request: WebResourceRequest?, error: WebResourceError?) {
                     super.onReceivedError(view, request, error)
                     Timber.w("WebView onReceivedError: ${error?.description} on ${request?.url}")
@@ -1155,7 +1246,7 @@ fun BrowserScreen(
                         }
                     }
                     // Inject location privacy spoof early
-                    view?.evaluateJavascript(geoPrivacyScript, null)
+                    view?.evaluateJavascript(getGeoPrivacyScript(), null)
                 }
 
                 override fun onPageFinished(view: WebView?, url: String?) {
@@ -1183,7 +1274,7 @@ fun BrowserScreen(
                     adBlockEngine.injectCosmeticAdHiding(view)
 
                     // Inject location privacy spoof again for SPA navigation
-                    view?.evaluateJavascript(geoPrivacyScript, null)
+                    view?.evaluateJavascript(getGeoPrivacyScript(), null)
 
                     // Sniff video media streams on the page
                     sniffWebVideos(view) { urls ->
@@ -1291,7 +1382,8 @@ fun BrowserScreen(
                 // Home Button
                 IconButton(
                     onClick = {
-                        val homeUrl = if (isAutomationMode) "https://x.com/i/flow/signup" else "https://www.google.com"
+                        val cc = selectedLocationPreset.countryCode.ifBlank { "us" }
+                        val homeUrl = if (isAutomationMode) "https://x.com/i/flow/signup" else "https://www.google.com/webhp?gl=$cc&hl=en&pws=0"
                         activeWebView?.loadUrl(homeUrl)
                     },
                     modifier = Modifier.size(36.dp)
@@ -1346,8 +1438,16 @@ fun BrowserScreen(
                             keyboardActions = KeyboardActions(
                                 onGo = {
                                     focusManager.clearFocus()
-                                    val template = searchEngines[selectedSearchEngine] ?: "https://www.google.com/search?q={query}&gl=us&hl=en&pws=0"
+                                    val cc = selectedLocationPreset.countryCode.ifBlank { "us" }
+                                    val template = searchEngines[selectedSearchEngine] ?: "https://www.google.com/search?q={query}&gl=$cc&hl=en&pws=0"
                                     val formatted = when {
+                                        inputUrl.equals("google.com", ignoreCase = true) ||
+                                            inputUrl.equals("www.google.com", ignoreCase = true) ||
+                                            inputUrl.equals("https://google.com", ignoreCase = true) ||
+                                            inputUrl.equals("https://www.google.com", ignoreCase = true) ||
+                                            inputUrl.equals("http://google.com", ignoreCase = true) ||
+                                            inputUrl.equals("http://www.google.com", ignoreCase = true) ->
+                                                "https://www.google.com/webhp?gl=$cc&hl=en&pws=0"
                                         inputUrl.startsWith("http://") || inputUrl.startsWith("https://") -> inputUrl
                                         inputUrl.contains(".") && !inputUrl.contains(" ") -> "https://$inputUrl"
                                         else -> template.replace("{query}", java.net.URLEncoder.encode(inputUrl, "UTF-8"))
@@ -2583,6 +2683,25 @@ fun BrowserScreen(
     // 8.5 LOCATION PRIVACY SHIELD DIALOG
     // ==========================================
     if (showLocationDialog) {
+        val applyPreset = { preset: GeoLocationPreset ->
+            selectedLocationPreset = preset
+            val script = buildGeoPrivacyScript(preset)
+            activeWebView?.evaluateJavascript(script, null)
+            val cur = activeWebView?.url ?: ""
+            if (cur.contains("google.")) {
+                val cc = preset.countryCode.ifBlank { "us" }
+                val newUrl = if (cur.contains("gl=")) {
+                    cur.replace(Regex("gl=[a-zA-Z]+"), "gl=$cc")
+                } else {
+                    val sep = if (cur.contains("?")) "&" else "?"
+                    "$cur${sep}gl=$cc&hl=en&pws=0"
+                }
+                activeWebView?.loadUrl(newUrl)
+            }
+            showLocationDialog = false
+            Toast.makeText(context, "Virtual Location: ${preset.flag} ${preset.name} active", Toast.LENGTH_SHORT).show()
+        }
+
         AlertDialog(
             onDismissRequest = { showLocationDialog = false },
             title = {
@@ -2609,25 +2728,13 @@ fun BrowserScreen(
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .clickable {
-                                        selectedLocationPreset = preset
-                                        val script = buildGeoPrivacyScript(preset)
-                                        activeWebView?.evaluateJavascript(script, null)
-                                        showLocationDialog = false
-                                        Toast.makeText(context, "Virtual Location: ${preset.flag} ${preset.name} active", Toast.LENGTH_SHORT).show()
-                                    }
+                                    .clickable { applyPreset(preset) }
                                     .padding(vertical = 8.dp, horizontal = 4.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 RadioButton(
                                     selected = selectedLocationPreset.id == preset.id,
-                                    onClick = {
-                                        selectedLocationPreset = preset
-                                        val script = buildGeoPrivacyScript(preset)
-                                        activeWebView?.evaluateJavascript(script, null)
-                                        showLocationDialog = false
-                                        Toast.makeText(context, "Virtual Location: ${preset.flag} ${preset.name} active", Toast.LENGTH_SHORT).show()
-                                    }
+                                    onClick = { applyPreset(preset) }
                                 )
                                 Spacer(modifier = Modifier.width(8.dp))
                                 Text(preset.flag, fontSize = 20.sp)
@@ -2690,14 +2797,12 @@ fun BrowserScreen(
                             try {
                                 val targetDir = File("/storage/emulated/0/Download/AAAX")
                                 if (!targetDir.exists()) targetDir.mkdirs()
-                                val uri = Uri.parse("/storage/emulated/0/Download/AAAX")
-                                val intent = Intent(Intent.ACTION_VIEW).apply {
-                                    setDataAndType(uri, "*/*")
+                                val intent = Intent(DownloadManager.ACTION_VIEW_DOWNLOADS).apply {
                                     addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                                 }
                                 context.startActivity(intent)
                             } catch (e: Exception) {
-                                Toast.makeText(context, "Location: /Download/AAAX", Toast.LENGTH_SHORT).show()
+                                Toast.makeText(context, "Location: Download/AAAX", Toast.LENGTH_SHORT).show()
                             }
                         }
                     ) {
@@ -2905,6 +3010,7 @@ fun BrowserScreen(
         var videoDurationSec by remember { mutableStateOf(0f) }
         var videoCurrentSec by remember { mutableStateOf(0f) }
         var isPlayingState by remember { mutableStateOf(true) }
+        var currentOrientation by remember { mutableStateOf("auto") }
 
         fun triggerControlsAutoHide() {
             controlsJob?.cancel()
@@ -2941,77 +3047,82 @@ fun BrowserScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .background(Color.Black)
-                .pointerInput(isScreenLocked) {
-                    if (!isScreenLocked) {
-                        var startSideIsLeft = true
-                        var isHorizontalDrag = false
-                        var isVerticalDrag = false
-                        detectDragGestures(
-                            onDragStart = { offset ->
-                                startSideIsLeft = offset.x < size.width / 2
-                                isHorizontalDrag = false
-                                isVerticalDrag = false
-                                triggerControlsAutoHide()
-                            },
-                            onDrag = { change, dragAmount ->
-                                change.consume()
-                                if (!isHorizontalDrag && !isVerticalDrag) {
-                                    if (abs(dragAmount.x) > abs(dragAmount.y) && abs(dragAmount.x) > 3f) {
-                                        isHorizontalDrag = true
-                                    } else if (abs(dragAmount.y) > 3f) {
-                                        isVerticalDrag = true
-                                    }
-                                }
-                                if (isHorizontalDrag) {
-                                    val deltaSeconds = (dragAmount.x / 14f).toInt()
-                                    if (deltaSeconds != 0) {
-                                        seekActiveVideo(deltaSeconds)
-                                    }
-                                } else if (isVerticalDrag) {
-                                    val deltaFraction = -dragAmount.y / size.height.toFloat()
-                                    if (startSideIsLeft) {
-                                        adjustBrightness(deltaFraction * 1.5f)
-                                    } else {
-                                        adjustVolume(deltaFraction * 1.5f)
-                                    }
-                                }
-                            }
-                        )
-                    }
-                }
-                .pointerInput(isScreenLocked) {
-                    if (!isScreenLocked) {
-                        detectTapGestures(
-                            onTap = {
-                                areControlsVisible = !areControlsVisible
-                                if (areControlsVisible) triggerControlsAutoHide()
-                            },
-                            onDoubleTap = { offset ->
-                                triggerControlsAutoHide()
-                                if (offset.x < size.width * 0.35f) {
-                                    seekActiveVideo(-10)
-                                } else if (offset.x > size.width * 0.65f) {
-                                    seekActiveVideo(10)
-                                } else {
-                                    activeWebView?.evaluateJavascript(
-                                        "var v = document.querySelector('video'); if (v) { if (v.paused) v.play(); else v.pause(); }",
-                                        null
-                                    )
-                                    isPlayingState = !isPlayingState
-                                    showGestureFeedback(
-                                        if (isPlayingState) Icons.Default.PlayArrow else Icons.Default.Pause,
-                                        if (isPlayingState) "Play" else "Pause"
-                                    )
-                                }
-                            }
-                        )
-                    }
-                }
         ) {
+            // Native Video Surface
             AndroidView(
                 factory = { customVideoView!! },
                 modifier = Modifier.fillMaxSize()
             )
+
+            // Transparent Gesture Interceptor Layer (on top of video surface)
+            if (!isScreenLocked) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .pointerInput(Unit) {
+                            var startSideIsLeft = true
+                            var isHorizontalDrag = false
+                            var isVerticalDrag = false
+                            detectDragGestures(
+                                onDragStart = { offset ->
+                                    startSideIsLeft = offset.x < size.width / 2
+                                    isHorizontalDrag = false
+                                    isVerticalDrag = false
+                                    triggerControlsAutoHide()
+                                },
+                                onDrag = { change, dragAmount ->
+                                    change.consume()
+                                    if (!isHorizontalDrag && !isVerticalDrag) {
+                                        if (abs(dragAmount.x) > abs(dragAmount.y) && abs(dragAmount.x) > 3f) {
+                                            isHorizontalDrag = true
+                                        } else if (abs(dragAmount.y) > 3f) {
+                                            isVerticalDrag = true
+                                        }
+                                    }
+                                    if (isHorizontalDrag) {
+                                        val deltaSeconds = (dragAmount.x / 14f).toInt()
+                                        if (deltaSeconds != 0) {
+                                            seekActiveVideo(deltaSeconds)
+                                        }
+                                    } else if (isVerticalDrag) {
+                                        val deltaFraction = -dragAmount.y / size.height.toFloat()
+                                        if (startSideIsLeft) {
+                                            adjustBrightness(deltaFraction * 1.5f)
+                                        } else {
+                                            adjustVolume(deltaFraction * 1.5f)
+                                        }
+                                    }
+                                }
+                            )
+                        }
+                        .pointerInput(Unit) {
+                            detectTapGestures(
+                                onTap = {
+                                    areControlsVisible = !areControlsVisible
+                                    if (areControlsVisible) triggerControlsAutoHide()
+                                },
+                                onDoubleTap = { offset ->
+                                    triggerControlsAutoHide()
+                                    if (offset.x < size.width * 0.35f) {
+                                        seekActiveVideo(-10)
+                                    } else if (offset.x > size.width * 0.65f) {
+                                        seekActiveVideo(10)
+                                    } else {
+                                        activeWebView?.evaluateJavascript(
+                                            "var v = document.querySelector('video'); if (v) { if (v.paused) v.play(); else v.pause(); }",
+                                            null
+                                        )
+                                        isPlayingState = !isPlayingState
+                                        showGestureFeedback(
+                                            if (isPlayingState) Icons.Default.PlayArrow else Icons.Default.Pause,
+                                            if (isPlayingState) "Play" else "Pause"
+                                        )
+                                    }
+                                }
+                            )
+                        }
+                )
+            }
 
             // Screen Locked Floating Unlock Button
             if (isScreenLocked) {
@@ -3051,6 +3162,8 @@ fun BrowserScreen(
                             // Exit Fullscreen Button
                             IconButton(
                                 onClick = {
+                                    (context as? Activity)?.requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+                                    (context as? Activity)?.window?.decorView?.systemUiVisibility = View.SYSTEM_UI_FLAG_VISIBLE
                                     customViewCallback?.onCustomViewHidden()
                                     customVideoView = null
                                     customViewCallback = null
@@ -3075,6 +3188,41 @@ fun BrowserScreen(
                                 horizontalArrangement = Arrangement.spacedBy(4.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
+                                // Screen Rotation Toggle
+                                IconButton(
+                                    onClick = {
+                                        val act = context as? Activity
+                                        val next = when (currentOrientation) {
+                                            "auto" -> "landscape"
+                                            "landscape" -> "portrait"
+                                            else -> "auto"
+                                        }
+                                        currentOrientation = next
+                                        when (next) {
+                                            "landscape" -> {
+                                                act?.requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+                                                showGestureFeedback(Icons.Default.ScreenRotation, "Screen: Landscape")
+                                            }
+                                            "portrait" -> {
+                                                act?.requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+                                                showGestureFeedback(Icons.Default.ScreenRotation, "Screen: Portrait")
+                                            }
+                                            else -> {
+                                                act?.requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+                                                showGestureFeedback(Icons.Default.ScreenRotation, "Screen: Auto-Rotate")
+                                            }
+                                        }
+                                        triggerControlsAutoHide()
+                                    },
+                                    modifier = Modifier.size(34.dp)
+                                ) {
+                                    Icon(
+                                        Icons.Default.ScreenRotation,
+                                        contentDescription = "Screen Rotation",
+                                        tint = if (currentOrientation != "auto") PrimaryBlue else Color.White
+                                    )
+                                }
+
                                 // Aspect Ratio Cycle
                                 IconButton(
                                     onClick = { cycleAspectRatio(); triggerControlsAutoHide() },

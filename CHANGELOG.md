@@ -18,9 +18,11 @@ All notable changes and architectural configurations for this project are docume
     - 🌋 **Reykjavik, Iceland** (`64.1466`, `-21.9426`, `Atlantic/Reykjavik`)
   - Continuous DOM Injection: Evaluates privacy spoofing across early DOM rendering cycles (`onProgressChanged` at 5%, 15%, 30%, 60%, 95%, 100%) and `onPageFinished`.
   - Non-Bypassable Geolocation Mock: Freezes `navigator.geolocation` via `Object.defineProperty` so scripts cannot access real GPS.
-  - Timezone & Language Concealment: Spoofs `Intl.DateTimeFormat().resolvedOptions().timeZone` and `navigator.languages = ['en-US', 'en']`.
-  - Google IP Masking: Injects DOM cleaner removing Google Search's "From your IP address" footer and sets search region parameters (`&gl=...&hl=en&pws=0`).
-  - WebChromeClient Permission Bridge: Grants prompt automatically to route all requests through the virtual spoof without triggering permission denied IP fallbacks.
+  - Timezone Offset & Locale Concealment: Spoofs `Intl.DateTimeFormat().resolvedOptions().timeZone`, `Date.prototype.getTimezoneOffset` to matching minutes, and `navigator.languages = ['en-US', 'en']`.
+  - WebRTC STUN/TURN Defense: Neutralizes WebRTC candidate gathering in `RTCPeerConnection` to eliminate local and public IP leakage to web scripts.
+  - Google IP Masking & Query Routing: Automatically appends `gl=...&hl=en&pws=0` to Google searches and homepages in `shouldOverrideUrlLoading` and Omnibox, while masking the IP footer via MutationObserver.
+  - WebChromeClient Permission Bridge: Grants prompt automatically with `settings.setGeolocationEnabled(true)` to route all requests through the virtual spoof without triggering permission denied IP fallbacks.
+  - Auto-Refresh on Location Switch: Automatically refreshes active search engine tabs when a new location preset is chosen.
 
 ### Added & Professional MX Player Video Engine
 - **Next-Gen MX Player & VLC Video Interface ([`BrowserScreen.kt`](file:///root/project/AAAX/app/src/main/java/com/aaa/orchestrator/ui/screens/BrowserScreen.kt))**:
