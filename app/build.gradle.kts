@@ -12,8 +12,8 @@ android {
         applicationId = "com.aaa.orchestrator"
         minSdk = 26
         targetSdk = 34
-        versionCode = 12
-        versionName = "2.5.2"
+        versionCode = 13
+        versionName = "2.6.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {

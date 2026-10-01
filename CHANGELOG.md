@@ -2,6 +2,47 @@
 
 All notable changes and architectural configurations for this project are documented here.
 
+## [2.6.0] - 2026-10-01
+
+### Added & Location Privacy Shield
+- **Virtual Location & Anti-Tracking Shield Engine ([`BrowserScreen.kt`](file:///root/project/AAAX/app/src/main/java/com/aaa/orchestrator/ui/screens/BrowserScreen.kt))**:
+  - Implemented full Geolocation & Anti-Tracking privacy architecture preventing websites, Google Search, and ad trackers from discovering real GPS coordinates, local IP addresses, or system timezones.
+  - Multi-Gateway Presets with 1-tap switching:
+    - 🎲 **Random Global Hub (Auto)**: dynamically assigns international hubs with randomized coordinate jitter on each session.
+    - 🗽 **New York, USA** (`40.7128`, `-74.0060`, `America/New_York`)
+    - 🏰 **London, UK** (`51.5074`, `-0.1278`, `Europe/London`)
+    - 🗾 **Tokyo, Japan** (`35.6762`, `139.6503`, `Asia/Tokyo`)
+    - 🏦 **Frankfurt, Germany** (`50.1109`, `8.6821`, `Europe/Berlin`)
+    - 🏔️ **Zurich, Switzerland** (`47.3769`, `8.5417`, `Europe/Zurich`)
+    - 🇸🇬 **Singapore** (`1.3521`, `103.8198`, `Asia/Singapore`)
+    - 🌋 **Reykjavik, Iceland** (`64.1466`, `-21.9426`, `Atlantic/Reykjavik`)
+  - Continuous DOM Injection: Evaluates privacy spoofing across early DOM rendering cycles (`onProgressChanged` at 5%, 15%, 30%, 60%, 95%, 100%) and `onPageFinished`.
+  - Non-Bypassable Geolocation Mock: Freezes `navigator.geolocation` via `Object.defineProperty` so scripts cannot access real GPS.
+  - Timezone & Language Concealment: Spoofs `Intl.DateTimeFormat().resolvedOptions().timeZone` and `navigator.languages = ['en-US', 'en']`.
+  - Google IP Masking: Injects DOM cleaner removing Google Search's "From your IP address" footer and sets search region parameters (`&gl=...&hl=en&pws=0`).
+  - WebChromeClient Permission Bridge: Grants prompt automatically to route all requests through the virtual spoof without triggering permission denied IP fallbacks.
+
+### Added & Professional MX Player Video Engine
+- **Next-Gen MX Player & VLC Video Interface ([`BrowserScreen.kt`](file:///root/project/AAAX/app/src/main/java/com/aaa/orchestrator/ui/screens/BrowserScreen.kt))**:
+  - **Auto-Hiding Interface**: Top and bottom controls auto-hide after 3.5 seconds of inactivity, smoothly reappearing on single tap.
+  - **Horizontal Seeking Gesture**: Swipe horizontally anywhere on screen to scrub forward/backward with real-time second offset feedback.
+  - **Vertical Dual-Side Gestures**: Left vertical swipe controls screen brightness (0-100%); right vertical swipe controls music volume (0-100%) with visual HUD pill.
+  - **Interactive Scrubbable Seekbar**: Real-time slider with elapsed time (`01:23`) and total duration (`08:45`) synchronized via 1-second DOM query ticker.
+  - **Playback Control Suite**: Instant 1-tap -10s Rewind, Play/Pause toggle, and +10s Fast Forward buttons.
+  - **Aspect Ratio Cycler**: Dynamic 1-tap switching between Fit, Crop/Fill, 16:9, 4:3, and Stretch Full.
+  - **200% Audio Volume Booster**: Web Audio API gain amplifier boosting quiet videos up to 2x volume with emerald indicator.
+  - **Speed Selector**: 0.5x, 0.75x, 1.0x, 1.25x, 1.5x, 2.0x playback speed.
+  - **Touch Lock Mode**: Complete screen touch lock guarding against accidental taps with floating amber unlock button.
+
+### Added & Full Browser Download Suite
+- **Downloads Manager & Video Sniffer ([`BrowserScreen.kt`](file:///root/project/AAAX/app/src/main/java/com/aaa/orchestrator/ui/screens/BrowserScreen.kt), [`AndroidManifest.xml`](file:///root/project/AAAX/app/src/main/AndroidManifest.xml), [`file_paths.xml`](file:///root/project/AAAX/app/src/main/res/xml/file_paths.xml))**:
+  - **Omnibox Download Sniffer Badge**: Dynamically detects HTML5 video/audio streams on any webpage and shows an active badge with count (`[📥 2]`).
+  - **1-Tap Stream Downloader**: Tapping the sniffer badge opens a download modal to instantly download detected media streams to `/storage/emulated/0/Download/AAAX/`.
+  - **Dedicated Downloads Manager Dialog**: View all downloaded videos, files, and documents with file size, modified date, and category filters (All, Videos, Documents).
+  - **FileProvider Integration**: Open downloaded videos/files in external media players/apps securely without exposed URI exceptions.
+  - **File Sharing & Deletion**: Share downloaded files via Android share sheet or delete them with automatic MediaScanner synchronization.
+  - **Direct Folder Access**: 1-tap "Open Folder" shortcut to open `/storage/emulated/0/Download/AAAX/` directly in the system file manager.
+
 ## [2.5.2] - 2026-10-01
 
 ### Fixed & Automation Architecture Overhaul
